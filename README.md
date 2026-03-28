@@ -45,4 +45,4 @@ npm run dev
 ```
 
 ---
-*Développé pour ASSO AMA par Antigravity.*
+*Développé pour L'association Musulmane Audomaroise Par Zayd Fliyou .*
