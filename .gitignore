@@ -1,0 +1,15 @@
+# Common
+node_modules/
+.DS_Store
+*.local
+
+# Server
+server/prisma/dev.db
+server/.env
+server/dist/
+
+# Frontend
+frontend/dist/
+frontend/node_modules/
+frontend/.env
+frontend/build/
