@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Users, Plus, Pencil, Trash2, X, Save } from 'lucide-react';
+import { authFetch } from '../utils/api';
 
 export default function Students() {
   const [students, setStudents] = useState<any[]>([]);
@@ -20,12 +21,12 @@ export default function Students() {
   }, []);
 
   const fetchStudents = async () => {
-    const res = await fetch('http://localhost:5000/api/students');
+    const res = await authFetch('/api/students');
     if (res.ok) setStudents(await res.json());
   };
 
   const fetchClasses = async () => {
-    const res = await fetch('http://localhost:5000/api/classes');
+    const res = await authFetch('/api/classes');
     if (res.ok) setClasses(await res.json());
   };
 
@@ -35,16 +36,14 @@ export default function Students() {
     try {
       if (editingId) {
         // Edit mode
-        await fetch(`http://localhost:5000/api/students/${editingId}`, {
+        await authFetch(`/api/students/${editingId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ firstName, lastName, classId })
         });
       } else {
         // Create mode
-        await fetch('http://localhost:5000/api/students', {
+        await authFetch('/api/students', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ firstName, lastName, classId })
         });
       }
@@ -58,7 +57,7 @@ export default function Students() {
   const handleDelete = async (id: number) => {
     if(!window.confirm("Voulez-vous vraiment supprimer cet élève ?")) return;
     try {
-      await fetch(`http://localhost:5000/api/students/${id}`, { method: 'DELETE' });
+      await authFetch(`/api/students/${id}`, { method: 'DELETE' });
       fetchStudents();
     } catch(err) { console.error(err); }
   };

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BookOpen, Plus, Pencil, Trash2, X, Save } from 'lucide-react';
+import { authFetch } from '../utils/api';
 
 export default function Classes() {
   const [classes, setClasses] = useState<any[]>([]);
@@ -13,7 +14,7 @@ export default function Classes() {
   }, []);
 
   const fetchClasses = async () => {
-    const res = await fetch('http://localhost:5000/api/classes');
+    const res = await authFetch('/api/classes');
     if (res.ok) {
       const data = await res.json();
       setClasses(data);
@@ -25,15 +26,13 @@ export default function Classes() {
     setLoading(true);
     try {
       if (editingId) {
-        await fetch(`http://localhost:5000/api/classes/${editingId}`, {
+        await authFetch(`/api/classes/${editingId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, tuitionFee })
         });
       } else {
-        await fetch('http://localhost:5000/api/classes', {
+        await authFetch('/api/classes', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, tuitionFee })
         });
       }
@@ -47,7 +46,7 @@ export default function Classes() {
   const handleDelete = async (id: number) => {
     if(!window.confirm("Voulez-vous vraiment supprimer cette classe ? Les élèves associés seront mis en 'Sans classe'.")) return;
     try {
-      await fetch(`http://localhost:5000/api/classes/${id}`, { method: 'DELETE' });
+      await authFetch(`/api/classes/${id}`, { method: 'DELETE' });
       fetchClasses();
     } catch(err) { console.error(err); }
   };

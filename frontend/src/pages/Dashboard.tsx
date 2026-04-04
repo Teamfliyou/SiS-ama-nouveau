@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Users, BookOpen, GraduationCap, TrendingUp } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { authFetch } from '../utils/api';
 
 export default function Dashboard() {
   const [data, setData] = useState({ studentsCount: 0, classesCount: 0, totalPayments: 0 });
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/stats')
+    authFetch('/api/stats')
       .then(res => res.json())
       .then(d => setData(d))
       .catch(console.error);

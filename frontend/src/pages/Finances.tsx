@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CreditCard, Plus, Pencil, Trash2, X, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { authFetch } from '../utils/api';
 
 export default function Finances() {
   const [payments, setPayments] = useState<any[]>([]);
@@ -18,12 +19,12 @@ export default function Finances() {
   }, []);
 
   const fetchPayments = async () => {
-    const res = await fetch('http://localhost:5000/api/payments');
+    const res = await authFetch('/api/payments');
     if (res.ok) setPayments(await res.json());
   };
 
   const fetchStudents = async () => {
-    const res = await fetch('http://localhost:5000/api/students');
+    const res = await authFetch('/api/students');
     if (res.ok) setStudents(await res.json());
   };
 
@@ -36,16 +37,14 @@ export default function Finances() {
     try {
       if (editingId) {
         // Edit mode
-        await fetch(`http://localhost:5000/api/payments/${editingId}`, {
+        await authFetch(`/api/payments/${editingId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amount, method })
         });
       } else {
         // Create mode
-        await fetch('http://localhost:5000/api/payments', {
+        await authFetch('/api/payments', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amount, studentId, method })
         });
       }
@@ -60,7 +59,7 @@ export default function Finances() {
   const handleDelete = async (id: number) => {
     if(!window.confirm("Voulez-vous vraiment supprimer ce paiement ?")) return;
     try {
-      await fetch(`http://localhost:5000/api/payments/${id}`, { method: 'DELETE' });
+      await authFetch(`/api/payments/${id}`, { method: 'DELETE' });
       fetchPayments();
       fetchStudents();
     } catch(err) { console.error(err); }

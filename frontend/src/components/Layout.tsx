@@ -6,6 +6,8 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const userEmail = localStorage.getItem('user') || 'Administrateur';
+  const userInitials = userEmail.slice(0, 2).toUpperCase();
 
   const navigation = [
     { name: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard },
@@ -97,10 +99,10 @@ export default function Layout() {
             </button>
             <div className="flex items-center space-x-3 border-l border-slate-200 pl-4">
               <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-blue-400 text-white flex items-center justify-center font-bold shadow-md">
-                AD
+                {userInitials}
               </div>
               <div className="hidden md:block">
-                <p className="text-sm font-medium text-slate-700">Administrateur</p>
+                <p className="text-sm font-medium text-slate-700">{userEmail}</p>
                 <p className="text-xs text-slate-500">Direction</p>
               </div>
             </div>

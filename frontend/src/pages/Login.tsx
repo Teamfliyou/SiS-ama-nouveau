@@ -20,10 +20,8 @@ export default function Login() {
       });
       const data = await response.json();
       if (response.ok) {
-        // Save token & info
         localStorage.setItem('token', data.token);
-        localStorage.setItem('user', email);
-        // Redirect to Dashboard
+        localStorage.setItem('user', data.email || email);
         navigate('/dashboard');
       } else {
         setMessage('Erreur: ' + data.error);
