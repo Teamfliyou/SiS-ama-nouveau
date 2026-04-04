@@ -4,6 +4,9 @@ import Dashboard from './pages/Dashboard';
 import Classes from './pages/Classes';
 import Students from './pages/Students';
 import Finances from './pages/Finances';
+import Attendance from './pages/Attendance';
+import CsvImport from './pages/CsvImport';
+import UsersAdmin from './pages/UsersAdmin';
 import Layout from './components/Layout';
 
 // Protected Route wrapper
@@ -27,6 +30,9 @@ function App() {
           <Route path="classes" element={<Classes />} />
           <Route path="students" element={<Students />} />
           <Route path="finances" element={<Finances />} />
+          <Route path="attendance" element={<Attendance />} />
+          <Route path="import-csv" element={<CsvImport />} />
+          <Route path="users" element={<UsersAdmin />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

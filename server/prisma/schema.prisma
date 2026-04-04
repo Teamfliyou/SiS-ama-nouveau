@@ -8,27 +8,31 @@ generator client {
 }
 
 model User {
-  id       Int    @id @default(autoincrement())
-  email    String @unique
-  password String
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  role      String   @default("STAFF")
+  createdAt DateTime @default(now())
 }
 
 model Class {
-  id         Int       @id @default(autoincrement())
-  name       String    @unique
-  tuitionFee Float     @default(0)
-  students   Student[]
-  createdAt  DateTime  @default(now())
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  tuitionFee  Float        @default(0)
+  students    Student[]
+  attendances Attendance[]
+  createdAt   DateTime     @default(now())
 }
 
 model Student {
-  id             Int       @id @default(autoincrement())
-  firstName      String
-  lastName       String
-  classId        Int?
-  class          Class?    @relation(fields: [classId], references: [id])
-  payments       Payment[]
-  createdAt      DateTime  @default(now())
+  id          Int          @id @default(autoincrement())
+  firstName   String
+  lastName    String
+  classId     Int?
+  class       Class?       @relation(fields: [classId], references: [id])
+  payments    Payment[]
+  attendances Attendance[]
+  createdAt   DateTime     @default(now())
 }
 
 model Payment {
@@ -38,4 +42,16 @@ model Payment {
   studentId Int
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   method    String?  @default("Espèces")
+}
+
+model Attendance {
+  id        Int     @id @default(autoincrement())
+  date      String  // "YYYY-MM-DD"
+  studentId Int
+  classId   Int
+  status    String  @default("PRESENT") // PRESENT, ABSENT, LATE
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([date, studentId])
 }

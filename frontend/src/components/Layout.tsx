@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu } from 'lucide-react';
+import { LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu, ClipboardList, UploadCloud, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Layout() {
@@ -7,6 +7,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const userEmail = localStorage.getItem('user') || 'Administrateur';
+  const userRole = localStorage.getItem('role') || '';
   const userInitials = userEmail.slice(0, 2).toUpperCase();
 
   const navigation = [
@@ -14,11 +15,15 @@ export default function Layout() {
     { name: 'Élèves', href: '/students', icon: Users },
     { name: 'Classes', href: '/classes', icon: BookOpen },
     { name: 'Finances', href: '/finances', icon: CreditCard },
+    { name: 'Appel', href: '/attendance', icon: ClipboardList },
+    { name: 'Import CSV', href: '/import-csv', icon: UploadCloud },
+    ...(userRole === 'ADMIN' ? [{ name: 'Utilisateurs', href: '/users', icon: ShieldCheck }] : []),
   ];
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('role');
     navigate('/login');
   };
 

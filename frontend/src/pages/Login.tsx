@@ -22,6 +22,7 @@ export default function Login() {
       if (response.ok) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', data.email || email);
+        localStorage.setItem('role', data.role || '');
         navigate('/dashboard');
       } else {
         setMessage('Erreur: ' + data.error);
