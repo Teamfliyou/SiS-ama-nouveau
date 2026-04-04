@@ -141,7 +141,7 @@ app.post('/api/users', requireAdmin, async (req, res) => {
 });
 
 app.put('/api/users/:id/role', requireAdmin, async (req, res) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const { role } = req.body;
   const currentUserId = (req as any).user.userId;
   if (parseInt(id) === currentUserId) return res.status(400).json({ error: 'Vous ne pouvez pas modifier votre propre rôle' });
@@ -158,7 +158,7 @@ app.put('/api/users/:id/role', requireAdmin, async (req, res) => {
 });
 
 app.delete('/api/users/:id', requireAdmin, async (req, res) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const currentUserId = (req as any).user.userId;
   if (parseInt(id) === currentUserId) return res.status(400).json({ error: 'Vous ne pouvez pas supprimer votre propre compte' });
   try {
@@ -194,7 +194,7 @@ app.post('/api/classes', async (req, res) => {
 });
 
 app.put('/api/classes/:id', async (req, res) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const { name, tuitionFee } = req.body;
   try {
     const cls = await prisma.class.update({
@@ -208,7 +208,7 @@ app.put('/api/classes/:id', async (req, res) => {
 });
 
 app.delete('/api/classes/:id', async (req, res) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   try {
     await prisma.class.delete({ where: { id: parseInt(id) } });
     res.json({ success: true });
@@ -246,7 +246,7 @@ app.post('/api/students', async (req, res) => {
 });
 
 app.put('/api/students/:id', async (req, res) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const { firstName, lastName, classId } = req.body;
   try {
     const st = await prisma.student.update({
@@ -260,7 +260,7 @@ app.put('/api/students/:id', async (req, res) => {
 });
 
 app.delete('/api/students/:id', async (req, res) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   try {
     await prisma.student.delete({ where: { id: parseInt(id) } });
     res.json({ success: true });
@@ -296,7 +296,7 @@ app.post('/api/payments', async (req, res) => {
 });
 
 app.put('/api/payments/:id', async (req, res) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const { amount, method } = req.body;
   try {
     const payment = await prisma.payment.update({
@@ -310,7 +310,7 @@ app.put('/api/payments/:id', async (req, res) => {
 });
 
 app.delete('/api/payments/:id', async (req, res) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   try {
     await prisma.payment.delete({ where: { id: parseInt(id) } });
     res.json({ success: true });

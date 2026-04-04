@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { UploadCloud, FileText, ArrowRight, CheckCircle2, AlertTriangle, X, RefreshCw } from 'lucide-react';
+import { UploadCloud, FileText, ArrowRight, CheckCircle2, AlertTriangle, X, RefreshCw, Download } from 'lucide-react';
 import { authFetch } from '../utils/api';
 
 type Step = 'upload' | 'mapping' | 'preview' | 'done';
@@ -87,6 +87,29 @@ export default function CsvImport() {
     } finally { setImporting(false); }
   };
 
+  const downloadSample = () => {
+    const content = [
+      'Prénom,Nom,Classe,Frais',
+      'Jean,Dupont,6ème A,150',
+      'Marie,Martin,6ème A,150',
+      'Paul,Leblanc,6ème B,150',
+      'Sophie,Bernard,6ème B,150',
+      'Lucas,Moreau,5ème A,180',
+      'Emma,Petit,5ème A,180',
+      'Hugo,Laurent,5ème B,180',
+      'Camille,Simon,4ème A,200',
+      'Nathan,Michel,4ème A,200',
+      'Léa,Lefebvre,3ème A,220',
+    ].join('\n');
+    const blob = new Blob(['\ufeff' + content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'eleves_exemple.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const reset = () => {
     setStep('upload'); setHeaders([]); setRows([]); setFileName('');
     setColumnMap({ firstName: '', lastName: '', className: '', tuitionFee: '' });
@@ -151,14 +174,23 @@ export default function CsvImport() {
             <p className="text-xs text-slate-300 mt-4">Format attendu : colonnes séparées par des virgules, première ligne = en-têtes</p>
           </div>
           {error && <p className="mt-4 text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>{error}</p>}
-          {/* Example */}
-          <div className="mt-6 p-4 bg-slate-50 rounded-xl">
-            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Exemple de fichier</p>
-            <code className="text-xs text-slate-600 font-mono">
-              Prénom,Nom,Classe,Frais<br/>
-              Jean,Dupont,6ème A,150<br/>
-              Marie,Martin,6ème B,150
-            </code>
+          {/* Example + Download */}
+          <div className="mt-6 p-4 bg-slate-50 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase mb-2">Exemple de fichier</p>
+              <code className="text-xs text-slate-600 font-mono">
+                Prénom,Nom,Classe,Frais<br/>
+                Jean,Dupont,6ème A,150<br/>
+                Marie,Martin,6ème B,150
+              </code>
+            </div>
+            <button
+              onClick={downloadSample}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-all shadow-sm whitespace-nowrap"
+            >
+              <Download className="w-4 h-4 text-primary" />
+              Télécharger un fichier test
+            </button>
           </div>
         </div>
       )}
