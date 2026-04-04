@@ -21,6 +21,7 @@ model Class {
   tuitionFee  Float        @default(0)
   students    Student[]
   attendances Attendance[]
+  teachers    Teacher[]
   createdAt   DateTime     @default(now())
 }
 
@@ -42,6 +43,18 @@ model Payment {
   studentId Int
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   method    String?  @default("Espèces")
+}
+
+model Teacher {
+  id        Int      @id @default(autoincrement())
+  firstName String
+  lastName  String
+  subject   String?
+  email     String?  @unique
+  phone     String?
+  classId   Int?
+  class     Class?   @relation(fields: [classId], references: [id])
+  createdAt DateTime @default(now())
 }
 
 model Attendance {

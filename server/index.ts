@@ -414,6 +414,76 @@ app.post('/api/import/students', async (req, res) => {
   }
 });
 
+// ─── Teachers ─────────────────────────────────────────────────────────────────
+
+app.get('/api/teachers', async (req, res) => {
+  try {
+    const teachers = await prisma.teacher.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } });
+    res.json(teachers);
+  } catch {
+    res.status(500).json({ error: 'Une erreur est survenue' });
+  }
+});
+
+app.post('/api/teachers', async (req, res) => {
+  const { firstName, lastName, subject, email, phone, classId } = req.body;
+  if (!firstName || !lastName) return res.status(400).json({ error: 'Prénom et nom requis' });
+  try {
+    const teacher = await prisma.teacher.create({
+      data: { firstName, lastName, subject, email: email || null, phone: phone || null, classId: classId ? parseInt(classId) : null },
+      include: { class: true }
+    });
+    res.status(201).json(teacher);
+  } catch {
+    res.status(400).json({ error: 'Email déjà utilisé ou données invalides' });
+  }
+});
+
+app.put('/api/teachers/:id', async (req, res) => {
+  const id = String(req.params.id);
+  const { firstName, lastName, subject, email, phone, classId } = req.body;
+  try {
+    const teacher = await prisma.teacher.update({
+      where: { id: parseInt(id) },
+      data: { firstName, lastName, subject, email: email || null, phone: phone || null, classId: classId ? parseInt(classId) : null },
+      include: { class: true }
+    });
+    res.json(teacher);
+  } catch {
+    res.status(500).json({ error: 'Une erreur est survenue' });
+  }
+});
+
+app.delete('/api/teachers/:id', async (req, res) => {
+  const id = String(req.params.id);
+  try {
+    await prisma.teacher.delete({ where: { id: parseInt(id) } });
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: 'Une erreur est survenue' });
+  }
+});
+
+// ─── Profile ──────────────────────────────────────────────────────────────────
+
+app.put('/api/profile/password', async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const userId = (req as any).user.userId;
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Champs requis manquants' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'Le nouveau mot de passe doit contenir au moins 8 caractères' });
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
+      return res.status(401).json({ error: 'Mot de passe actuel incorrect' });
+    }
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({ where: { id: userId }, data: { password: hashed } });
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: 'Une erreur est survenue' });
+  }
+});
+
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 5000;
