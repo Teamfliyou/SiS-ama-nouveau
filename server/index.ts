@@ -101,11 +101,13 @@ app.use(authenticate);
 // Stats
 app.get('/api/stats', async (req, res) => {
   try {
-    const studentsCount = await prisma.student.count();
-    const classesCount = await prisma.class.count();
-    const payments = await prisma.payment.aggregate({ _sum: { amount: true } });
-    const totalPayments = payments._sum.amount || 0;
-    res.json({ studentsCount, classesCount, totalPayments });
+    const [studentsCount, classesCount, teachersCount, payments] = await Promise.all([
+      prisma.student.count(),
+      prisma.class.count(),
+      prisma.teacher.count(),
+      prisma.payment.aggregate({ _sum: { amount: true } }),
+    ]);
+    res.json({ studentsCount, classesCount, teachersCount, totalPayments: payments._sum.amount || 0 });
   } catch {
     res.status(500).json({ error: 'Une erreur est survenue' });
   }
@@ -411,6 +413,58 @@ app.post('/api/import/students', async (req, res) => {
     res.json({ success: true, createdStudents, createdClasses });
   } catch {
     res.status(500).json({ error: 'Erreur pendant l\'import' });
+  }
+});
+
+// ─── Export / Import ──────────────────────────────────────────────────────────
+
+app.get('/api/export', async (req, res) => {
+  try {
+    const [classes, students, teachers, payments] = await Promise.all([
+      prisma.class.findMany({ orderBy: { name: 'asc' } }),
+      prisma.student.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } }),
+      prisma.teacher.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } }),
+      prisma.payment.findMany({ include: { student: true }, orderBy: { date: 'desc' } }),
+    ]);
+    res.setHeader('Content-Disposition', `attachment; filename="asso-ama-export-${new Date().toISOString().slice(0,10)}.json"`);
+    res.json({ exportDate: new Date().toISOString(), version: '1', classes, students, teachers, payments });
+  } catch {
+    res.status(500).json({ error: 'Une erreur est survenue' });
+  }
+});
+
+app.post('/api/import/full', async (req, res) => {
+  const { classes = [], students = [], teachers = [] } = req.body;
+  let classesCreated = 0, studentsCreated = 0, teachersCreated = 0;
+  const classMap = new Map<string, number>(); // original name -> new id
+
+  try {
+    for (const cls of classes) {
+      const created = await prisma.class.upsert({
+        where: { name: cls.name },
+        update: {},
+        create: { name: cls.name, tuitionFee: cls.tuitionFee || 0 },
+      });
+      classMap.set(cls.name, created.id);
+      classesCreated++;
+    }
+    for (const st of students) {
+      const className = st.class?.name;
+      const classId = className ? classMap.get(className) ?? null : null;
+      await prisma.student.create({ data: { firstName: st.firstName, lastName: st.lastName, classId } });
+      studentsCreated++;
+    }
+    for (const t of teachers) {
+      const className = t.class?.name;
+      const classId = className ? classMap.get(className) ?? null : null;
+      await prisma.teacher.create({
+        data: { firstName: t.firstName, lastName: t.lastName, subject: t.subject, email: t.email ? `import_${Date.now()}_${t.email}` : null, phone: t.phone, classId }
+      });
+      teachersCreated++;
+    }
+    res.json({ success: true, classesCreated, studentsCreated, teachersCreated });
+  } catch {
+    res.status(500).json({ error: "Erreur pendant l'import" });
   }
 });
 
