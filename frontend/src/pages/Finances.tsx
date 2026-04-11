@@ -1,13 +1,18 @@
 import { useState, useEffect } from 'react';
-import { CreditCard, Plus, Pencil, Trash2, X, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { CreditCard, Plus, Pencil, Trash2, X, Save, AlertCircle, CheckCircle2, Filter } from 'lucide-react';
 import { authFetch } from '../utils/api';
 
 export default function Finances() {
   const [payments, setPayments] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  
+
+  // Filter state
+  const [filterClassId, setFilterClassId] = useState('');
+  const [formClassId, setFormClassId] = useState('');
+
   // Form State
   const [studentId, setStudentId] = useState('');
   const [amount, setAmount] = useState('');
@@ -16,6 +21,7 @@ export default function Finances() {
   useEffect(() => {
     fetchPayments();
     fetchStudents();
+    fetchClasses();
   }, []);
 
   const fetchPayments = async () => {
@@ -28,7 +34,22 @@ export default function Finances() {
     if (res.ok) setStudents(await res.json());
   };
 
+  const fetchClasses = async () => {
+    const res = await authFetch('/api/classes');
+    if (res.ok) setClasses(await res.json());
+  };
+
   const selectedStudent = students.find(s => s.id === parseInt(studentId));
+
+  // Students filtered by class selected in form
+  const studentsForForm = formClassId
+    ? students.filter(s => s.classId === parseInt(formClassId))
+    : students;
+
+  // Payments filtered by class selected in history filter
+  const filteredPayments = filterClassId
+    ? payments.filter(p => p.student?.class?.id === parseInt(filterClassId) || p.student?.classId === parseInt(filterClassId))
+    : payments;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +98,7 @@ export default function Finances() {
     setStudentId('');
     setAmount('');
     setMethod('Espèces');
+    setFormClassId('');
   };
 
   return (
@@ -131,21 +153,35 @@ export default function Finances() {
             </div>
             <form onSubmit={handleSave} className="space-y-4">
               {!editingId && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">Élève</label>
-                  <select 
-                    required
-                    className="mt-1 block w-full px-3 py-2 border border-slate-200 rounded-lg shadow-sm focus:ring-2 focus:ring-primary focus:border-transparent bg-slate-50"
-                    value={studentId} onChange={e => setStudentId(e.target.value)}
-                  >
-                    <option value="">-- Choisir un élève --</option>
-                    {students.map(st => (
-                      <option key={st.id} value={st.id}>
-                        {st.firstName} {st.lastName} ({st.class?.name || 'Sans classe'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Filtrer par classe</label>
+                    <select
+                      className="mt-1 block w-full px-3 py-2 border border-slate-200 rounded-lg shadow-sm bg-slate-50 focus:ring-2 focus:ring-primary"
+                      value={formClassId} onChange={e => { setFormClassId(e.target.value); setStudentId(''); }}
+                    >
+                      <option value="">-- Toutes les classes --</option>
+                      {classes.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Élève</label>
+                    <select
+                      required
+                      className="mt-1 block w-full px-3 py-2 border border-slate-200 rounded-lg shadow-sm focus:ring-2 focus:ring-primary focus:border-transparent bg-slate-50"
+                      value={studentId} onChange={e => setStudentId(e.target.value)}
+                    >
+                      <option value="">-- Choisir un élève --</option>
+                      {studentsForForm.map(st => (
+                        <option key={st.id} value={st.id}>
+                          {st.firstName} {st.lastName} ({st.class?.name || 'Sans classe'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
               )}
               {editingId && (
                  <div className="p-2 bg-white/50 border border-amber-200 rounded-md mb-2">
@@ -192,9 +228,20 @@ export default function Finances() {
         {/* Right Column: History Table */}
         <div className="lg:col-span-3">
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
                 <h3 className="font-bold text-slate-800">Historique des transactions</h3>
-                <div className="text-xs text-slate-400 uppercase font-semibold">Trié par date décroissante</div>
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-slate-400" />
+                  <select
+                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary"
+                    value={filterClassId} onChange={e => setFilterClassId(e.target.value)}
+                  >
+                    <option value="">Toutes les classes</option>
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
              </div>
              <table className="min-w-full divide-y divide-slate-200">
                <thead className="bg-white">
@@ -207,7 +254,7 @@ export default function Finances() {
                  </tr>
                </thead>
                <tbody className="bg-white divide-y divide-slate-100">
-                 {payments.length === 0 ? (
+                 {filteredPayments.length === 0 ? (
                    <tr>
                      <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
                        <AlertCircle className="w-12 h-12 mx-auto text-slate-300 mb-3" />
@@ -215,7 +262,7 @@ export default function Finances() {
                      </td>
                    </tr>
                  ) : (
-                   payments.map((pay) => (
+                   filteredPayments.map((pay) => (
                      <tr key={pay.id} className="hover:bg-slate-50/30 group transition-colors">
                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                          {new Date(pay.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}

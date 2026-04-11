@@ -8,7 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authFetch } from '../utils/api';
 
 type Stats = { studentsCount: number; classesCount: number; teachersCount: number; totalPayments: number };
-type ImportResult = { classesCreated: number; studentsCreated: number; teachersCreated: number };
+type ImportResult = { classesCreated: number; studentsCreated: number; teachersCreated: number; paymentsCreated: number; attendancesCreated: number };
 
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats>({ studentsCount: 0, classesCount: 0, teachersCount: 0, totalPayments: 0 });
@@ -315,7 +315,7 @@ export default function Dashboard() {
               {importResult && (
                 <p className="mt-2 text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5"/>
-                  {importResult.classesCreated} classes · {importResult.studentsCreated} élèves · {importResult.teachersCreated} profs importés
+                  {importResult.classesCreated} classes · {importResult.studentsCreated} élèves · {importResult.teachersCreated} profs · {importResult.paymentsCreated} paiements · {importResult.attendancesCreated} présences importés
                 </p>
               )}
               {importError && (

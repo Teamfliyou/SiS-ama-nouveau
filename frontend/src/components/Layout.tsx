@@ -78,7 +78,7 @@ export default function Layout() {
       <div className={`fixed inset-y-0 left-0 z-30 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 shadow-sm ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-full flex flex-col">
           <div className="flex items-center justify-center h-20 border-b border-slate-100 px-6">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">ASSO AMA SIS</h1>
+            <img src="/logo.png" alt="ASSO AMA SIS" className="h-14 w-auto object-contain" />
           </div>
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
