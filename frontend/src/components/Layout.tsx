@@ -50,7 +50,7 @@ export default function Layout() {
     e.preventDefault();
     setPwdLoading(true); setPwdError(''); setPwdSuccess(false);
     try {
-      const res = await authFetch('/api/profile/password', {
+      const res = await authFetch('/api/auth/password', {
         method: 'PUT',
         body: JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd })
       });

@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:5000';
+export const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('token');
@@ -19,6 +19,7 @@ export async function authFetch(path: string, options: RequestInit = {}): Promis
   if (res.status === 401) {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('role');
     window.location.href = '/login';
   }
 

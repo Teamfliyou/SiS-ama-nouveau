@@ -76,7 +76,7 @@ export default function CsvImport() {
   const handleImport = async () => {
     setImporting(true); setError('');
     try {
-      const res = await authFetch('/api/import/students', {
+      const res = await authFetch('/api/import-csv/students', {
         method: 'POST',
         body: JSON.stringify({ rows: mappedRows })
       });

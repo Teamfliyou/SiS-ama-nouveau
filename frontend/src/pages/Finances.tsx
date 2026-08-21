@@ -25,7 +25,7 @@ export default function Finances() {
   }, []);
 
   const fetchPayments = async () => {
-    const res = await authFetch('/api/payments');
+    const res = await authFetch('/api/finances');
     if (res.ok) setPayments(await res.json());
   };
 
@@ -58,13 +58,13 @@ export default function Finances() {
     try {
       if (editingId) {
         // Edit mode
-        await authFetch(`/api/payments/${editingId}`, {
+        await authFetch(`/api/finances/${editingId}`, {
           method: 'PUT',
           body: JSON.stringify({ amount, method })
         });
       } else {
         // Create mode
-        await authFetch('/api/payments', {
+        await authFetch('/api/finances', {
           method: 'POST',
           body: JSON.stringify({ amount, studentId, method })
         });
@@ -80,7 +80,7 @@ export default function Finances() {
   const handleDelete = async (id: number) => {
     if(!window.confirm("Voulez-vous vraiment supprimer ce paiement ?")) return;
     try {
-      await authFetch(`/api/payments/${id}`, { method: 'DELETE' });
+      await authFetch(`/api/finances/${id}`, { method: 'DELETE' });
       fetchPayments();
       fetchStudents();
     } catch(err) { console.error(err); }

@@ -9,5 +9,6 @@
     "outDir": "./dist",
     "rootDir": "./"
   },
-  "include": ["**/*.ts"]
+  "include": ["index.ts", "lib/**/*.ts", "middleware/**/*.ts", "routes/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

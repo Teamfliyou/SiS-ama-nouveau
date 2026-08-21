@@ -54,7 +54,7 @@ export default function Dashboard() {
     e.preventDefault();
     setPwdLoading(true); setPwdMsg(null);
     try {
-      const res = await authFetch('/api/profile/password', {
+      const res = await authFetch('/api/auth/password', {
         method: 'PUT',
         body: JSON.stringify({ currentPassword: curPwd, newPassword: newPwd })
       });

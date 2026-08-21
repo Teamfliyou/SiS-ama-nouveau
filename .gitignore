@@ -1,16 +1,20 @@
-# Common
+# Dependencies
 node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Databases (SQLite)
+*.db
+*.db-journal
+
+# Builds
+dist/
+build/
+
+# Misc
 .DS_Store
 *.local
 .claude/
-
-# Server
-server/prisma/dev.db
-server/.env
-server/dist/
-
-# Frontend
-frontend/dist/
-frontend/node_modules/
-frontend/.env
-frontend/build/
