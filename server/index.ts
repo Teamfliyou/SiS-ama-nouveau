@@ -22,10 +22,14 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
-// CORS: comma-separated list of allowed origins (defaults to the Vite dev server)
-const corsOrigin = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim()).filter(Boolean)
-  : 'http://localhost:5173';
+// CORS: allowed frontend origins in production via FRONTEND_URL or CORS_ORIGIN
+// (comma-separated). Defaults to the Vite dev server origin.
+const allowedOrigins = [
+  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : []),
+  ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : []),
+].map(o => o.trim()).filter(Boolean);
+
+const corsOrigin = allowedOrigins.length > 0 ? allowedOrigins : 'http://localhost:5173';
 
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '10mb' }));
@@ -51,9 +55,9 @@ app.use('/api', (req, res) => {
 
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 3000;
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`Server running on port ${PORT}`);
   try {
     if ((await prisma.user.count()) === 0) {
