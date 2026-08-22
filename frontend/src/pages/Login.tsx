@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE } from '../utils/api';
 
@@ -8,6 +8,13 @@ export default function Login() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/setup/status`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => { if (data?.needsSetup) navigate('/setup', { replace: true }); })
+      .catch(() => {});
+  }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

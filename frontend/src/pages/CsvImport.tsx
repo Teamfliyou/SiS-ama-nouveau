@@ -1,26 +1,11 @@
 import { useState, useRef } from 'react';
 import { UploadCloud, FileText, ArrowRight, CheckCircle2, AlertTriangle, X, RefreshCw, Download } from 'lucide-react';
 import { authFetch } from '../utils/api';
+import { parseCSV, downloadCsv } from '../utils/csv';
 
 type Step = 'upload' | 'mapping' | 'preview' | 'done';
 type ColumnMap = { firstName: string; lastName: string; className: string; tuitionFee: string };
 type ImportResult = { createdStudents: number; createdClasses: number };
-
-function parseCSV(text: string): string[][] {
-  const lines = text.trim().split(/\r?\n/);
-  return lines.map(line => {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (const char of line) {
-      if (char === '"') { inQuotes = !inQuotes; }
-      else if (char === ',' && !inQuotes) { result.push(current.trim()); current = ''; }
-      else { current += char; }
-    }
-    result.push(current.trim());
-    return result;
-  });
-}
 
 export default function CsvImport() {
   const [step, setStep] = useState<Step>('upload');
@@ -101,13 +86,7 @@ export default function CsvImport() {
       'Nathan,Michel,4ème A,200',
       'Léa,Lefebvre,3ème A,220',
     ].join('\n');
-    const blob = new Blob(['\ufeff' + content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'eleves_exemple.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv('eleves_exemple.csv', content);
   };
 
   const reset = () => {

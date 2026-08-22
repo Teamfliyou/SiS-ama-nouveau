@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import bcrypt from 'bcrypt';
 import 'dotenv/config';
 import { prisma } from './lib/prisma';
 import authRoutes from './routes/auth';
@@ -13,6 +12,7 @@ import financeRoutes from './routes/finances';
 import importCsvRoutes from './routes/importCsv';
 import dataRoutes from './routes/data';
 import statsRoutes from './routes/stats';
+import setupRoutes from './routes/setup';
 
 const app = express();
 
@@ -40,6 +40,7 @@ app.use('/api/teachers', teacherRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/finances', financeRoutes);
 app.use('/api/import-csv', importCsvRoutes);
+app.use('/api/setup', setupRoutes); // public bootstrap routes, must be mounted before /api catch-all
 app.use('/api', dataRoutes); // /api/export, /api/import/full
 app.use('/api/stats', statsRoutes);
 
@@ -52,18 +53,13 @@ app.use('/api', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-const seedUser = async () => {
-  const existing = await prisma.user.findUnique({ where: { email: 'admin@example.com' } });
-  if (!existing) {
-    const hashed = await bcrypt.hash('Admin@2024!', 12);
-    await prisma.user.create({ data: { email: 'admin@example.com', password: hashed, role: 'ADMIN' } });
-    console.log('Seeded default admin user (admin@example.com / Admin@2024!)');
-  } else if (existing.role !== 'ADMIN') {
-    await prisma.user.update({ where: { id: existing.id }, data: { role: 'ADMIN' } });
-    console.log('Updated admin user role to ADMIN');
+app.listen(PORT, async () => {
+  console.log(`Server running on port ${PORT}`);
+  try {
+    if ((await prisma.user.count()) === 0) {
+      console.log('No user found — open the app to run the initial setup wizard.');
+    }
+  } catch {
+    // Database might not be migrated yet; migrations are handled by prisma commands.
   }
-};
-
-seedUser().then(() => {
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 });

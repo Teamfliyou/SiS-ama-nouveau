@@ -8,6 +8,7 @@ import Attendance from './pages/Attendance';
 import CsvImport from './pages/CsvImport';
 import UsersAdmin from './pages/UsersAdmin';
 import Teachers from './pages/Teachers';
+import Setup from './pages/Setup';
 import Layout from './components/Layout';
 
 // Protected Route wrapper
@@ -24,6 +25,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/setup" element={<Setup />} />
         
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
