@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Users, Plus, Pencil, Trash2, X, Save, Search, SlidersHorizontal, ChevronDown } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, X, Save, Search, SlidersHorizontal, ChevronDown, Eye, Loader2 } from 'lucide-react';
 import { authFetch } from '../utils/api';
+import { toast } from '../utils/toast';
 
 export default function Students() {
   const [students, setStudents] = useState<any[]>([]);
@@ -12,6 +13,8 @@ export default function Students() {
   const [classId, setClassId] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [detailsStudent, setDetailsStudent] = useState<any>(null);
 
   // Filter State
   const [search, setSearch] = useState('');
@@ -38,27 +41,42 @@ export default function Students() {
     e.preventDefault();
     setLoading(true);
     try {
-      if (editingId) {
-        await authFetch(`/api/students/${editingId}`, {
-          method: 'PUT',
-          body: JSON.stringify({ firstName, lastName, classId })
-        });
-      } else {
-        await authFetch('/api/students', {
-          method: 'POST',
-          body: JSON.stringify({ firstName, lastName, classId })
-        });
-      }
+      const res = editingId
+        ? await authFetch(`/api/students/${editingId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ firstName, lastName, classId })
+          })
+        : await authFetch('/api/students', {
+            method: 'POST',
+            body: JSON.stringify({ firstName, lastName, classId })
+          });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error || "Erreur lors de l'enregistrement"); return; }
+      toast.success(editingId ? 'Élève modifié avec succès' : 'Élève inscrit avec succès');
       resetForm();
       fetchStudents();
+    } catch {
+      toast.error('Erreur de connexion au serveur');
     } finally {
-      setLoading(false); }
+      setLoading(false);
+    }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Voulez-vous vraiment supprimer cet élève ?')) return;
-    await authFetch(`/api/students/${id}`, { method: 'DELETE' });
-    fetchStudents();
+  const handleDelete = async (st: any) => {
+    if (!window.confirm(`Supprimer définitivement ${st.firstName} ${st.lastName} ? Ses paiements seront également supprimés.`)) return;
+    setDeletingId(st.id);
+    try {
+      const res = await authFetch(`/api/students/${st.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error || 'Erreur lors de la suppression'); return; }
+      toast.success('Élève supprimé');
+      if (detailsStudent?.id === st.id) setDetailsStudent(null);
+      fetchStudents();
+    } catch {
+      toast.error('Erreur de connexion au serveur');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const openEdit = (st: any) => {
@@ -318,7 +336,14 @@ export default function Students() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-right space-x-2">
+                      <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
+                        <button
+                          onClick={() => setDetailsStudent(st)}
+                          className="inline-flex items-center p-1.5 border border-slate-200 text-slate-500 rounded-md hover:bg-slate-50 hover:text-primary transition-colors"
+                          title="Consulter la fiche"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => openEdit(st)}
                           className="inline-flex items-center p-1.5 border border-slate-200 text-slate-500 rounded-md hover:bg-slate-50 hover:text-blue-600 transition-colors"
@@ -327,11 +352,14 @@ export default function Students() {
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(st.id)}
-                          className="inline-flex items-center p-1.5 border border-red-100 text-red-400 rounded-md hover:bg-red-50 hover:text-red-600 transition-colors"
+                          onClick={() => handleDelete(st)}
+                          disabled={deletingId === st.id}
+                          className="inline-flex items-center p-1.5 border border-red-100 text-red-400 rounded-md hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50"
                           title="Supprimer"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {deletingId === st.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <Trash2 className="w-4 h-4" />}
                         </button>
                       </td>
                     </tr>
@@ -342,6 +370,89 @@ export default function Students() {
           </div>
         </div>
       </div>
+
+      {/* ── Student details modal ── */}
+      {detailsStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => setDetailsStudent(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start p-6 border-b border-slate-100">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-primary to-blue-400 text-white flex items-center justify-center text-sm font-bold">
+                  {detailsStudent.firstName[0]}{detailsStudent.lastName[0]}
+                </div>
+                <div>
+                  <p className="font-bold text-slate-900 text-lg">
+                    {detailsStudent.firstName} <span className="uppercase">{detailsStudent.lastName}</span>
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    {detailsStudent.class ? `Classe ${detailsStudent.class.name} — Frais : ${detailsStudent.class.tuitionFee} €` : 'Sans classe'}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setDetailsStudent(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Financial summary */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
+                  <p className="text-xs font-semibold text-slate-400 uppercase">Total dû</p>
+                  <p className="text-lg font-black text-slate-700">{detailsStudent.totalAmountDue} €</p>
+                </div>
+                <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                  <p className="text-xs font-semibold text-emerald-500 uppercase">Payé</p>
+                  <p className="text-lg font-black text-emerald-600">{detailsStudent.totalPaid} €</p>
+                </div>
+                <div className={`rounded-xl p-3 text-center ${detailsStudent.remaining <= 0 ? 'bg-emerald-50' : 'bg-orange-50'}`}>
+                  <p className={`text-xs font-semibold uppercase ${detailsStudent.remaining <= 0 ? 'text-emerald-500' : 'text-orange-400'}`}>Reste</p>
+                  <p className={`text-lg font-black ${detailsStudent.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>{detailsStudent.remaining} €</p>
+                </div>
+              </div>
+
+              {/* Payment history */}
+              <div>
+                <p className="text-sm font-bold text-slate-700 mb-2">Historique des paiements ({detailsStudent.payments?.length || 0})</p>
+                {(detailsStudent.payments?.length || 0) === 0 ? (
+                  <p className="text-sm text-slate-400 italic bg-slate-50 rounded-xl p-4">Aucun paiement enregistré pour cet élève.</p>
+                ) : (
+                  <ul className="divide-y divide-slate-100 border border-slate-100 rounded-xl max-h-48 overflow-y-auto">
+                    {[...detailsStudent.payments]
+                      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .map((p: any) => (
+                        <li key={p.id} className="flex items-center justify-between px-4 py-2.5">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-700">+{p.amount} €</p>
+                            <p className="text-xs text-slate-400">{p.method}</p>
+                          </div>
+                          <span className="text-xs text-slate-400">
+                            {new Date(p.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  onClick={() => { setDetailsStudent(null); openEdit(detailsStudent); }}
+                  className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  Modifier la fiche
+                </button>
+                <button
+                  onClick={() => setDetailsStudent(null)}
+                  className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

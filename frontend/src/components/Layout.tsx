@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { authFetch } from '../utils/api';
+import ToastContainer from './ToastContainer';
 
 export default function Layout() {
   const location = useLocation();
@@ -194,6 +195,9 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Global toast notifications */}
+      <ToastContainer />
 
       {/* ── Change password modal ── */}
       {showPwdModal && (
