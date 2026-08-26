@@ -4,7 +4,7 @@ import {
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
   ChevronDown, User, KeyRound, X, Eye, EyeOff
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../utils/api';
 import ToastContainer from './ToastContainer';
 
@@ -14,6 +14,7 @@ export default function Layout() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isProfileOpen, setProfileOpen] = useState(false);
   const [showPwdModal, setShowPwdModal] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   // Password change form
   const [currentPwd, setCurrentPwd] = useState('');
@@ -28,6 +29,18 @@ export default function Layout() {
   const userRole = localStorage.getItem('role') || '';
   const userInitials = userEmail.slice(0, 2).toUpperCase();
   const isAdmin = userRole === 'ADMIN';
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    if (isProfileOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isProfileOpen]);
 
   const navigation = [
     { name: 'Tableau de bord', href: '/dashboard',   icon: LayoutDashboard },
@@ -68,11 +81,6 @@ export default function Layout() {
       {/* Mobile sidebar backdrop */}
       {isSidebarOpen && (
         <div className="fixed inset-0 z-20 bg-slate-900/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
-
-      {/* Profile dropdown backdrop */}
-      {isProfileOpen && (
-        <div className="fixed inset-0 z-30" onClick={() => setProfileOpen(false)} />
       )}
 
       {/* Sidebar */}
@@ -125,7 +133,7 @@ export default function Layout() {
             </button>
 
             {/* ── Profile menu ── */}
-            <div className="relative border-l border-slate-200 pl-3">
+            <div ref={profileRef} className="relative border-l border-slate-200 pl-3">
               <button
                 onClick={() => setProfileOpen(o => !o)}
                 className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-slate-100 transition-colors group"
