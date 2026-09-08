@@ -3,9 +3,22 @@ import { Users, Plus, Pencil, Trash2, X, Save, Search, SlidersHorizontal, Chevro
 import { authFetch } from '../utils/api';
 import { toast } from '../utils/toast';
 
+type Student = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  classId: number | null;
+  class: { id: number; name: string; tuitionFee: number } | null;
+  payments: { id: number; amount: number; date: string; method: string | null }[];
+  totalPaid: number;
+  totalAmountDue: number;
+  remaining: number;
+};
+type ClassItem = { id: number; name: string; tuitionFee: number; _count: { students: number } };
+
 export default function Students() {
-  const [students, setStudents] = useState<any[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
 
   // Form State
   const [firstName, setFirstName] = useState('');
@@ -14,7 +27,7 @@ export default function Students() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [detailsStudent, setDetailsStudent] = useState<any>(null);
+  const [detailsStudent, setDetailsStudent] = useState<Student | null>(null);
 
   // Filter State
   const [search, setSearch] = useState('');
@@ -62,7 +75,7 @@ export default function Students() {
     }
   };
 
-  const handleDelete = async (st: any) => {
+  const handleDelete = async (st: Student) => {
     if (!window.confirm(`Supprimer définitivement ${st.firstName} ${st.lastName} ? Ses paiements seront également supprimés.`)) return;
     setDeletingId(st.id);
     try {
@@ -79,7 +92,7 @@ export default function Students() {
     }
   };
 
-  const openEdit = (st: any) => {
+  const openEdit = (st: Student) => {
     setEditingId(st.id);
     setFirstName(st.firstName);
     setLastName(st.lastName);
@@ -257,7 +270,7 @@ export default function Students() {
               <div className="relative">
                 <select
                   value={sortBy}
-                  onChange={e => setSortBy(e.target.value as any)}
+                  onChange={e => setSortBy(e.target.value as 'name' | 'class' | 'remaining')}
                   className={`appearance-none pl-3 pr-8 py-1.5 border rounded-lg text-sm font-medium transition-colors bg-white cursor-pointer ${sortBy !== 'name' ? 'border-primary text-primary bg-blue-50' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}
                 >
                   <option value="name">Trier par nom</option>
@@ -419,8 +432,8 @@ export default function Students() {
                 ) : (
                   <ul className="divide-y divide-slate-100 border border-slate-100 rounded-xl max-h-48 overflow-y-auto">
                     {[...detailsStudent.payments]
-                      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                      .map((p: any) => (
+                      .sort((a: Student['payments'][number], b: Student['payments'][number]) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .map((p: Student['payments'][number]) => (
                         <li key={p.id} className="flex items-center justify-between px-4 py-2.5">
                           <div>
                             <p className="text-sm font-semibold text-slate-700">+{p.amount} €</p>

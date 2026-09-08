@@ -125,8 +125,8 @@ function CsvStep({
       const result = await importer(validRows);
       setSummary(result);
       toast.success(`${title} importé${title.endsWith('s') ? 's' : ''} avec succès`);
-    } catch (err: any) {
-      setError(err?.message || 'Erreur pendant l\'import');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur pendant l\'import');
     } finally {
       setImporting(false);
     }
@@ -362,7 +362,7 @@ export default function Setup() {
   const importClasses = async (rows: RowMap[]): Promise<ImportSummary> => {
     const listRes = await authFetch('/api/classes');
     if (!listRes.ok) throw new Error('Impossible de lire les classes existantes');
-    const existing = new Set(((await listRes.json()) as any[]).map(c => c.name));
+    const existing = new Set(((await listRes.json()) as { name: string }[]).map(c => c.name));
     const seen = new Set<string>();
     let created = 0;
     let skipped = 0;

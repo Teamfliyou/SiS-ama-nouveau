@@ -35,7 +35,7 @@ export default function Login() {
       } else {
         setMessage('Erreur: ' + data.error);
       }
-    } catch (err: any) {
+    } catch {
       setMessage('Erreur de connexion au serveur.');
     } finally {
       setLoading(false);

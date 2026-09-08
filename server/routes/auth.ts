@@ -69,7 +69,7 @@ router.put('/password', authenticate, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
-      return res.status(401).json({ error: 'Mot de passe actuel incorrect' });
+      return res.status(400).json({ error: 'Mot de passe actuel incorrect' });
     }
     const hashed = await bcrypt.hash(newPassword, 12);
     await prisma.user.update({ where: { id: userId }, data: { password: hashed } });

@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { BookOpen, Plus, Pencil, Trash2, X, Save } from 'lucide-react';
 import { authFetch } from '../utils/api';
 
+type ClassItem = { id: number; name: string; tuitionFee: number; _count: { students: number } };
+
 export default function Classes() {
-  const [classes, setClasses] = useState<any[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
   const [name, setName] = useState('');
   const [tuitionFee, setTuitionFee] = useState('0');
   const [loading, setLoading] = useState(false);
@@ -44,14 +46,14 @@ export default function Classes() {
   };
 
   const handleDelete = async (id: number) => {
-    if(!window.confirm("Voulez-vous vraiment supprimer cette classe ? Les élèves associés seront mis en 'Sans classe'.")) return;
+    if(!window.confirm("Voulez-vous vraiment supprimer cette classe ? Les élèves associés seront mis en 'Sans classe' et l'historique d'appel (présences) de cette classe sera supprimé.")) return;
     try {
       await authFetch(`/api/classes/${id}`, { method: 'DELETE' });
       fetchClasses();
     } catch(err) { console.error(err); }
   };
 
-  const openEdit = (cls: any) => {
+  const openEdit = (cls: ClassItem) => {
     setEditingId(cls.id);
     setName(cls.name);
     setTuitionFee(cls.tuitionFee.toString());

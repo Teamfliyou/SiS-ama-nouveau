@@ -2,10 +2,21 @@ import { useState, useEffect } from 'react';
 import { CreditCard, Plus, Pencil, Trash2, X, Save, AlertCircle, CheckCircle2, Filter } from 'lucide-react';
 import { authFetch } from '../utils/api';
 
+type Payment = {
+  id: number;
+  amount: number;
+  date: string;
+  method: string;
+  studentId: number;
+  student: { id: number; firstName: string; lastName: string; classId: number | null; class: { id: number; name: string } | null };
+};
+type Student = { id: number; firstName: string; lastName: string; classId: number | null; class: { id: number; name: string; tuitionFee: number } | null; totalPaid: number; totalAmountDue: number; remaining: number };
+type ClassItem = { id: number; name: string; tuitionFee: number; _count: { students: number } };
+
 export default function Finances() {
-  const [payments, setPayments] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -86,7 +97,7 @@ export default function Finances() {
     } catch(err) { console.error(err); }
   };
 
-  const openEdit = (pay: any) => {
+  const openEdit = (pay: Payment) => {
     setEditingId(pay.id);
     setStudentId(pay.studentId.toString());
     setAmount(pay.amount.toString());
