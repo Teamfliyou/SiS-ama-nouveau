@@ -8,7 +8,7 @@ import {
 import { API_BASE, authFetch } from '../utils/api';
 import { toast } from '../utils/toast';
 import ToastContainer from '../components/ToastContainer';
-import { parseCSV, findColumn, downloadCsv } from '../utils/csv';
+import { parseCSV, findColumn, downloadCsv, downloadExcel } from '../utils/csv';
 
 type Step = 'admin' | 'users' | 'classes' | 'students' | 'teachers' | 'done';
 type RowMap = Record<string, string>;
@@ -33,7 +33,8 @@ const STUDENTS_FIELDS: FieldDef[] = [
   { key: 'firstName', label: 'Prénom', required: true, aliases: ['prénom', 'prenom', 'firstname', 'first name'] },
   { key: 'lastName', label: 'Nom', required: true, aliases: ['nom de famille', 'lastname', 'last name', 'nom'] },
   { key: 'className', label: 'Classe', aliases: ['classe', 'class'] },
-  { key: 'tuitionFee', label: 'Frais de scolarité', aliases: ['frais', 'fee', 'tarif'] },
+  { key: 'tuitionFee', label: 'Frais de scolarité', aliases: ['frais', 'fee', 'tarif', 'prix'] },
+  { key: 'phone', label: 'Téléphone', aliases: ['téléphone', 'telephone', 'tel', 'portable', 'contact', 'phone'] },
 ];
 
 const TEACHERS_FIELDS: FieldDef[] = [
@@ -185,12 +186,20 @@ function CsvStep({
             <p className="text-xs text-slate-400 mt-1">ou cliquez pour parcourir</p>
             <p className="text-[11px] text-slate-300 mt-3">Colonnes attendues : {formatHint}</p>
           </div>
-          <button
-            onClick={() => downloadCsv(sampleFilename, sampleContent)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-all shadow-sm"
-          >
-            <Download className="w-3.5 h-3.5 text-primary" /> Télécharger un modèle
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => downloadCsv(sampleFilename, sampleContent)}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-all shadow-sm"
+            >
+              <Download className="w-3.5 h-3.5 text-primary" /> Télécharger un modèle
+            </button>
+            <button
+              onClick={() => downloadExcel(sampleFilename.replace(/\.csv$/i, '.xls'), sampleContent)}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-all shadow-sm"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-600" /> Modèle Excel
+            </button>
+          </div>
         </>
       ) : (
         <>
@@ -636,8 +645,8 @@ export default function Setup() {
               icon={<Users className="w-5 h-5" />}
               fields={STUDENTS_FIELDS}
               sampleFilename="eleves_modele.csv"
-              sampleContent={['Prénom,Nom,Classe,Frais', 'Jean,Dupont,6ème A,150', 'Marie,Martin,6ème A,150'].join('\n')}
-              formatHint="Prénom · Nom · Classe (optionnel) · Frais (optionnel)"
+              sampleContent={['Prénom,Nom,Classe,Frais,Téléphone', 'Jean,Dupont,6ème A,150,06 12 34 56 78', 'Marie,Martin,6ème A,150,07 23 45 67 89'].join('\n')}
+              formatHint="Prénom · Nom · Classe (optionnel) · Frais/Prix (optionnel) · Téléphone (optionnel)"
               importer={importStudents}
               onComplete={() => setStep('teachers')}
               onSkip={() => setStep('teachers')}

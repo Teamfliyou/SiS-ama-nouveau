@@ -23,10 +23,10 @@ router.get('/', async (req, res) => {
 
 // POST /api/students
 router.post('/', async (req, res) => {
-  const { firstName, lastName, classId } = req.body;
+  const { firstName, lastName, phone, classId } = req.body;
   try {
     const st = await prisma.student.create({
-      data: { firstName, lastName, classId: classId ? parseInt(classId) : null }
+      data: { firstName, lastName, phone: phone ? String(phone).trim() : null, classId: classId ? parseInt(classId) : null }
     });
     res.status(201).json(st);
   } catch {
@@ -37,11 +37,11 @@ router.post('/', async (req, res) => {
 // PUT /api/students/:id
 router.put('/:id', async (req, res) => {
   const id = String(req.params.id);
-  const { firstName, lastName, classId } = req.body;
+  const { firstName, lastName, phone, classId } = req.body;
   try {
     const st = await prisma.student.update({
       where: { id: parseInt(id) },
-      data: { firstName, lastName, classId: classId ? parseInt(classId) : null }
+      data: { firstName, lastName, phone: phone ? String(phone).trim() : null, classId: classId ? parseInt(classId) : null }
     });
     res.json(st);
   } catch {

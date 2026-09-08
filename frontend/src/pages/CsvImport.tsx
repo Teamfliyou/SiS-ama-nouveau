@@ -1,17 +1,17 @@
 import { useState, useRef } from 'react';
 import { UploadCloud, FileText, ArrowRight, CheckCircle2, AlertTriangle, X, RefreshCw, Download } from 'lucide-react';
 import { authFetch } from '../utils/api';
-import { parseCSV, downloadCsv } from '../utils/csv';
+import { parseCSV, downloadCsv, downloadExcel } from '../utils/csv';
 
 type Step = 'upload' | 'mapping' | 'preview' | 'done';
-type ColumnMap = { firstName: string; lastName: string; className: string; tuitionFee: string };
+type ColumnMap = { firstName: string; lastName: string; className: string; tuitionFee: string; phone: string };
 type ImportResult = { createdStudents: number; createdClasses: number; skipped?: number };
 
 export default function CsvImport() {
   const [step, setStep] = useState<Step>('upload');
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
-  const [columnMap, setColumnMap] = useState<ColumnMap>({ firstName: '', lastName: '', className: '', tuitionFee: '' });
+  const [columnMap, setColumnMap] = useState<ColumnMap>({ firstName: '', lastName: '', className: '', tuitionFee: '', phone: '' });
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState('');
@@ -31,13 +31,14 @@ export default function CsvImport() {
       setHeaders(parsed[0]);
       setRows(parsed.slice(1));
       // Auto-detect common column names
-      const autoMap = { firstName: '', lastName: '', className: '', tuitionFee: '' };
+      const autoMap = { firstName: '', lastName: '', className: '', tuitionFee: '', phone: '' };
       parsed[0].forEach(h => {
         const lower = h.toLowerCase();
         if (!autoMap.firstName && (lower.includes('prénom') || lower.includes('prenom') || lower === 'firstname')) autoMap.firstName = h;
         else if (!autoMap.lastName && (lower.includes('nom') || lower === 'lastname')) autoMap.lastName = h;
         else if (!autoMap.className && (lower.includes('classe') || lower === 'class')) autoMap.className = h;
-        else if (!autoMap.tuitionFee && (lower.includes('frais') || lower.includes('fee') || lower.includes('tarif'))) autoMap.tuitionFee = h;
+        else if (!autoMap.tuitionFee && (lower.includes('frais') || lower.includes('fee') || lower.includes('tarif') || lower.includes('prix'))) autoMap.tuitionFee = h;
+        else if (!autoMap.phone && (lower.includes('téléphone') || lower.includes('telephone') || lower.includes('tel') || lower.includes('portable') || lower.includes('contact') || lower === 'phone')) autoMap.phone = h;
       });
       setColumnMap(autoMap);
       setStep('mapping');
@@ -56,6 +57,7 @@ export default function CsvImport() {
     lastName: columnMap.lastName ? row[headers.indexOf(columnMap.lastName)] || '' : '',
     className: columnMap.className ? row[headers.indexOf(columnMap.className)] || '' : '',
     tuitionFee: columnMap.tuitionFee ? parseFloat(row[headers.indexOf(columnMap.tuitionFee)]) || 0 : undefined,
+    phone: columnMap.phone ? row[headers.indexOf(columnMap.phone)] || '' : '',
   })).filter(r => r.firstName || r.lastName);
 
   const handleImport = async () => {
@@ -74,24 +76,41 @@ export default function CsvImport() {
 
   const downloadSample = () => {
     const content = [
-      'Prénom,Nom,Classe,Frais',
-      'Jean,Dupont,6ème A,150',
-      'Marie,Martin,6ème A,150',
-      'Paul,Leblanc,6ème B,150',
-      'Sophie,Bernard,6ème B,150',
-      'Lucas,Moreau,5ème A,180',
-      'Emma,Petit,5ème A,180',
-      'Hugo,Laurent,5ème B,180',
-      'Camille,Simon,4ème A,200',
-      'Nathan,Michel,4ème A,200',
-      'Léa,Lefebvre,3ème A,220',
+      'Prénom,Nom,Classe,Frais,Téléphone',
+      'Jean,Dupont,6ème A,150,06 12 34 56 78',
+      'Marie,Martin,6ème A,150,07 23 45 67 89',
+      'Paul,Leblanc,6ème B,150,06 34 56 78 90',
+      'Sophie,Bernard,6ème B,150,07 45 67 89 01',
+      'Lucas,Moreau,5ème A,180,06 56 78 90 12',
+      'Emma,Petit,5ème A,180,07 67 89 01 23',
+      'Hugo,Laurent,5ème B,180,06 78 90 12 34',
+      'Camille,Simon,4ème A,200,07 89 01 23 45',
+      'Nathan,Michel,4ème A,200,06 90 12 34 56',
+      'Léa,Lefebvre,3ème A,220,07 01 23 45 67',
     ].join('\n');
     downloadCsv('eleves_exemple.csv', content);
   };
 
+  const downloadSampleExcel = () => {
+    const content = [
+      'Prénom,Nom,Classe,Frais,Téléphone',
+      'Jean,Dupont,6ème A,150,06 12 34 56 78',
+      'Marie,Martin,6ème A,150,07 23 45 67 89',
+      'Paul,Leblanc,6ème B,150,06 34 56 78 90',
+      'Sophie,Bernard,6ème B,150,07 45 67 89 01',
+      'Lucas,Moreau,5ème A,180,06 56 78 90 12',
+      'Emma,Petit,5ème A,180,07 67 89 01 23',
+      'Hugo,Laurent,5ème B,180,06 78 90 12 34',
+      'Camille,Simon,4ème A,200,07 89 01 23 45',
+      'Nathan,Michel,4ème A,200,06 90 12 34 56',
+      'Léa,Lefebvre,3ème A,220,07 01 23 45 67',
+    ].join('\n');
+    downloadExcel('eleves_exemple.xls', content);
+  };
+
   const reset = () => {
     setStep('upload'); setHeaders([]); setRows([]); setFileName('');
-    setColumnMap({ firstName: '', lastName: '', className: '', tuitionFee: '' });
+    setColumnMap({ firstName: '', lastName: '', className: '', tuitionFee: '', phone: '' });
     setResult(null); setError('');
     if (fileRef.current) fileRef.current.value = '';
   };
@@ -163,6 +182,7 @@ export default function CsvImport() {
                 Marie,Martin,6ème B,150
               </code>
             </div>
+            <div className="flex flex-wrap gap-2">
             <button
               onClick={downloadSample}
               className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-all shadow-sm whitespace-nowrap"
@@ -170,6 +190,14 @@ export default function CsvImport() {
               <Download className="w-4 h-4 text-primary" />
               Télécharger un fichier test
             </button>
+            <button
+              onClick={downloadSampleExcel}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition-all shadow-sm whitespace-nowrap"
+            >
+              <Download className="w-4 h-4 text-emerald-600" />
+              Télécharger en Excel
+            </button>
+          </div>
           </div>
         </div>
       )}
@@ -191,6 +219,7 @@ export default function CsvImport() {
               { key: 'lastName',  label: 'Nom',    required: true },
               { key: 'className', label: 'Classe',  required: false },
               { key: 'tuitionFee', label: 'Frais de scolarité (optionnel)', required: false },
+              { key: 'phone', label: 'Téléphone (optionnel)', required: false },
             ] as const).map(field => (
               <div key={field.key}>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -244,6 +273,7 @@ export default function CsvImport() {
                     <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Nom</th>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Classe</th>
                     {columnMap.tuitionFee && <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Frais</th>}
+                    {columnMap.phone && <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Téléphone</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -254,6 +284,7 @@ export default function CsvImport() {
                       <td className="px-5 py-3 text-sm text-slate-700">{row.lastName || <span className="text-red-400 italic">manquant</span>}</td>
                       <td className="px-5 py-3 text-sm text-slate-500">{row.className || <span className="text-slate-300 italic">—</span>}</td>
                       {columnMap.tuitionFee && <td className="px-5 py-3 text-sm text-emerald-600 font-semibold">{row.tuitionFee ?? '—'} €</td>}
+                      {columnMap.phone && <td className="px-5 py-3 text-sm text-slate-500">{row.phone || <span className="text-slate-300 italic">—</span>}</td>}
                     </tr>
                   ))}
                 </tbody>

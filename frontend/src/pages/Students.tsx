@@ -7,6 +7,7 @@ type Student = {
   id: number;
   firstName: string;
   lastName: string;
+  phone: string | null;
   classId: number | null;
   class: { id: number; name: string; tuitionFee: number } | null;
   payments: { id: number; amount: number; date: string; method: string | null }[];
@@ -23,6 +24,7 @@ export default function Students() {
   // Form State
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
   const [classId, setClassId] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -57,11 +59,11 @@ export default function Students() {
       const res = editingId
         ? await authFetch(`/api/students/${editingId}`, {
             method: 'PUT',
-            body: JSON.stringify({ firstName, lastName, classId })
+            body: JSON.stringify({ firstName, lastName, phone, classId })
           })
         : await authFetch('/api/students', {
             method: 'POST',
-            body: JSON.stringify({ firstName, lastName, classId })
+            body: JSON.stringify({ firstName, lastName, phone, classId })
           });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { toast.error(data.error || "Erreur lors de l'enregistrement"); return; }
@@ -96,6 +98,7 @@ export default function Students() {
     setEditingId(st.id);
     setFirstName(st.firstName);
     setLastName(st.lastName);
+    setPhone(st.phone || '');
     setClassId(st.classId ? st.classId.toString() : '');
   };
 
@@ -103,6 +106,7 @@ export default function Students() {
     setEditingId(null);
     setFirstName('');
     setLastName('');
+    setPhone('');
     setClassId('');
   };
 
@@ -122,7 +126,8 @@ export default function Students() {
       const q = search.toLowerCase();
       list = list.filter(s =>
         s.firstName.toLowerCase().includes(q) ||
-        s.lastName.toLowerCase().includes(q)
+        s.lastName.toLowerCase().includes(q) ||
+        (s.phone || '').toLowerCase().includes(q)
       );
     }
     if (filterClass) {
@@ -178,6 +183,15 @@ export default function Students() {
                   type="text" required
                   className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary"
                   value={lastName} onChange={e => setLastName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Téléphone</label>
+                <input
+                  type="tel"
+                  placeholder="06 12 34 56 78"
+                  className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary"
+                  value={phone} onChange={e => setPhone(e.target.value)}
                 />
               </div>
               <div>
@@ -319,9 +333,12 @@ export default function Students() {
                           <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-primary to-blue-400 text-white flex items-center justify-center text-xs font-bold shrink-0">
                             {st.firstName[0]}{st.lastName[0]}
                           </div>
-                          <span className="font-medium text-slate-900">
-                            {st.firstName} <span className="uppercase">{st.lastName}</span>
-                          </span>
+                          <div className="min-w-0">
+                            <span className="font-medium text-slate-900">
+                              {st.firstName} <span className="uppercase">{st.lastName}</span>
+                            </span>
+                            {st.phone && <p className="text-xs text-slate-400">{st.phone}</p>}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -400,6 +417,7 @@ export default function Students() {
                   <p className="text-sm text-slate-400">
                     {detailsStudent.class ? `Classe ${detailsStudent.class.name} — Frais : ${detailsStudent.class.tuitionFee} €` : 'Sans classe'}
                   </p>
+                  {detailsStudent.phone && <p className="text-sm text-slate-400">Tél : {detailsStudent.phone}</p>}
                 </div>
               </div>
               <button onClick={() => setDetailsStudent(null)} className="text-slate-400 hover:text-slate-600">

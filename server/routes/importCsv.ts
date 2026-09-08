@@ -10,7 +10,7 @@ router.use(authenticate);
 // POST /api/import-csv/students
 router.post('/students', async (req, res) => {
   const { rows } = req.body as {
-    rows: { firstName: string; lastName: string; className: string; tuitionFee?: number }[];
+    rows: { firstName: string; lastName: string; phone?: string; className: string; tuitionFee?: number }[];
   };
   if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ error: 'Aucune donnée à importer' });
 
@@ -30,7 +30,7 @@ router.post('/students', async (req, res) => {
     for (const s of existingStudents) seenStudents.add(studentKey(s.firstName, s.lastName));
 
     for (const row of rows) {
-      const { firstName, lastName, className, tuitionFee } = row;
+      const { firstName, lastName, phone, className, tuitionFee } = row;
       if (!firstName || !lastName) { skipped++; continue; }
       // Case/whitespace-insensitive dedup: same student full name = single record
       const fullName = studentKey(firstName, lastName);
@@ -51,7 +51,7 @@ router.post('/students', async (req, res) => {
         }
       }
 
-      await prisma.student.create({ data: { firstName: String(firstName).trim(), lastName: String(lastName).trim(), classId } });
+      await prisma.student.create({ data: { firstName: String(firstName).trim(), lastName: String(lastName).trim(), phone: phone ? String(phone).trim() : null, classId } });
       createdStudents++;
     }
     res.json({ success: true, createdStudents, createdClasses, skipped });

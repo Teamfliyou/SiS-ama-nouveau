@@ -29,6 +29,7 @@ model Student {
   id          Int          @id @default(autoincrement())
   firstName   String
   lastName    String
+  phone       String?
   classId     Int?
   class       Class?       @relation(fields: [classId], references: [id])
   payments    Payment[]

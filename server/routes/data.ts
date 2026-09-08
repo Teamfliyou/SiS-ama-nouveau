@@ -69,7 +69,7 @@ router.post('/import/full', async (req, res) => {
         studentsSkipped++;
       } else {
         const created = await prisma.student.create({
-          data: { firstName: st.firstName.trim(), lastName: st.lastName.trim(), classId: resolveClassId(st.class?.name) }
+          data: { firstName: st.firstName.trim(), lastName: st.lastName.trim(), phone: st.phone ? String(st.phone).trim() : null, classId: resolveClassId(st.class?.name) }
         });
         studentId = created.id;
         studentsByKey.set(key, studentId);
