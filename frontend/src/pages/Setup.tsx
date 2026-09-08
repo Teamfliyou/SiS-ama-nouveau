@@ -69,6 +69,8 @@ function extractRows(fields: FieldDef[], headers: string[], rows: string[][], co
   }).filter(r => fields.every(f => !f.required || r[f.key].trim() !== ''));
 }
 
+const normKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+
 // ─── Generic CSV import step ──────────────────────────────────────────────────
 
 function CsvStep({
@@ -362,14 +364,15 @@ export default function Setup() {
   const importClasses = async (rows: RowMap[]): Promise<ImportSummary> => {
     const listRes = await authFetch('/api/classes');
     if (!listRes.ok) throw new Error('Impossible de lire les classes existantes');
-    const existing = new Set(((await listRes.json()) as { name: string }[]).map(c => c.name));
+    const existing = new Set(((await listRes.json()) as { name: string }[]).map(c => normKey(c.name)));
     const seen = new Set<string>();
     let created = 0;
     let skipped = 0;
     for (const r of rows) {
       const name = r.name.trim();
-      if (!name || existing.has(name) || seen.has(name)) { skipped++; continue; }
-      seen.add(name);
+      const key = normKey(name);
+      if (!name || existing.has(key) || seen.has(key)) { skipped++; continue; }
+      seen.add(key);
       const res = await authFetch('/api/classes', {
         method: 'POST',
         body: JSON.stringify({ name, tuitionFee: parseFloat(r.tuitionFee) || 0 }),
@@ -393,6 +396,7 @@ export default function Setup() {
     setResults(prev => ({ ...prev, students: prev.students + (data.createdStudents || 0), classes: prev.classes + (data.createdClasses || 0) }));
     return [
       { label: 'Élèves inscrits', count: data.createdStudents || 0 },
+      { label: 'Doublons ignorés', count: data.skipped || 0 },
       { label: 'Classes créées', count: data.createdClasses || 0 },
     ];
   };

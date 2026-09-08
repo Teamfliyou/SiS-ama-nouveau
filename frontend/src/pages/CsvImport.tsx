@@ -5,7 +5,7 @@ import { parseCSV, downloadCsv } from '../utils/csv';
 
 type Step = 'upload' | 'mapping' | 'preview' | 'done';
 type ColumnMap = { firstName: string; lastName: string; className: string; tuitionFee: string };
-type ImportResult = { createdStudents: number; createdClasses: number };
+type ImportResult = { createdStudents: number; createdClasses: number; skipped?: number };
 
 export default function CsvImport() {
   const [step, setStep] = useState<Step>('upload');
@@ -293,6 +293,12 @@ export default function CsvImport() {
               <p className="text-3xl font-black text-indigo-600">{result.createdClasses}</p>
               <p className="text-sm text-slate-600 mt-1">classe{result.createdClasses > 1 ? 's' : ''} créée{result.createdClasses > 1 ? 's' : ''}</p>
             </div>
+            {!!result.skipped && (
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl px-8 py-5">
+                <p className="text-3xl font-black text-amber-600">{result.skipped}</p>
+                <p className="text-sm text-slate-600 mt-1">doublon{result.skipped! > 1 ? 's' : ''} ignoré{result.skipped! > 1 ? 's' : ''}</p>
+              </div>
+            )}
           </div>
           <button
             onClick={reset}

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
+import { normalizeKey } from '../lib/dedupe';
 
 const router = Router();
 
@@ -19,10 +20,15 @@ router.get('/', async (req, res) => {
 // POST /api/classes
 router.post('/', async (req, res) => {
   const { name, tuitionFee } = req.body;
-  if (!name) return res.status(400).json({ error: 'Nom requis' });
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  if (!trimmed) return res.status(400).json({ error: 'Nom requis' });
   try {
+    const all = await prisma.class.findMany({ select: { name: true } });
+    if (all.some(c => normalizeKey(c.name) === normalizeKey(trimmed))) {
+      return res.status(409).json({ error: 'Cette classe existe déjà' });
+    }
     const newClass = await prisma.class.create({
-      data: { name, tuitionFee: tuitionFee ? parseFloat(tuitionFee) : 0 }
+      data: { name: trimmed, tuitionFee: tuitionFee ? parseFloat(tuitionFee) : 0 }
     });
     res.status(201).json(newClass);
   } catch {
@@ -32,11 +38,17 @@ router.post('/', async (req, res) => {
 
 // PUT /api/classes/:id
 router.put('/:id', async (req, res) => {
-  const id = String(req.params.id);
+  const id = parseInt(String(req.params.id));
   const { name, tuitionFee } = req.body;
   try {
+    if (name && String(name).trim()) {
+      const others = await prisma.class.findMany({ where: { NOT: { id } }, select: { name: true } });
+      if (others.some(c => normalizeKey(c.name) === normalizeKey(String(name)))) {
+        return res.status(409).json({ error: 'Cette classe existe déjà' });
+      }
+    }
     const cls = await prisma.class.update({
-      where: { id: parseInt(id) },
+      where: { id },
       data: { name, tuitionFee: tuitionFee ? parseFloat(tuitionFee) : 0 }
     });
     res.json(cls);
