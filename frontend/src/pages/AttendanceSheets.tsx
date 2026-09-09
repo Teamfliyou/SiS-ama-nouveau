@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Printer, Calendar, ChevronDown, ClipboardCheck } from 'lucide-react';
-import { authFetch } from '../utils/api';
+import { authFetch, safeJson } from '../utils/api';
 
 type ClassItem = { id: number; name: string; _count: { students: number } };
 type Student = { id: number; firstName: string; lastName: string; classId: number };
@@ -24,8 +24,14 @@ export default function AttendanceSheets() {
   const [firstDate, setFirstDate] = useState(new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
-    authFetch('/api/classes').then(r => r.json()).then(setClasses);
-    authFetch('/api/students').then(r => r.json()).then(setStudents);
+    authFetch('/api/classes')
+      .then((r) => safeJson<ClassItem[]>(r))
+      .then(setClasses)
+      .catch(() => {});
+    authFetch('/api/students')
+      .then((r) => safeJson<Student[]>(r))
+      .then(setStudents)
+      .catch(() => {});
   }, []);
 
   const dates = useMemo(() => {

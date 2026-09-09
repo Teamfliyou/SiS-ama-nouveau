@@ -65,7 +65,8 @@ export const parseId = (raw: string | string[] | undefined, label = 'Identifiant
   return n;
 };
 
-/** Money in euros accepted from clients: finite, positive-ish, max 2 decimals. */
+/** Money in euros accepted from clients: finite, positive-ish, max 2 decimals.
+ * Capped so that converting to integer cents never overflows SQLite's Int (2^31-1). */
 const euroAmount = (min: number, label: string) =>
   z
     .number(label)
@@ -73,7 +74,8 @@ const euroAmount = (min: number, label: string) =>
     .refine((v) => v >= min, { message: `${label} invalide` })
     .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, {
       message: `${label} ne peut pas avoir plus de 2 décimales`,
-    });
+    })
+    .max(21_474_836.47, `${label} trop élevé`);
 
 // ─── Schemas per resource ─────────────────────────────────────────────
 
@@ -146,8 +148,25 @@ export const attendanceStatusSchema = z.enum(['PRESENT', 'ABSENT', 'LATE'], {
   message: 'Statut invalide (PRESENT, ABSENT ou LATE uniquement)',
 });
 
+/** True when `value` is a real calendar day in strict YYYY-MM-DD form (e.g. 2026-02-31 is rejected). */
+export function isRealDateString(value: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return false;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (y < 1000 || y > 9999) return false;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
+export const dateStringSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'La date doit être au format YYYY-MM-DD')
+  .refine(isRealDateString, { message: 'Date inexistante' });
+
 export const attendanceCreateSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La date doit être au format YYYY-MM-DD'),
+  date: dateStringSchema,
   records: z
     .array(
       z.object({

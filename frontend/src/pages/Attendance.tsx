@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ClipboardList, CheckCircle2, XCircle, Clock, Save, ChevronDown, Calendar } from 'lucide-react';
-import { authFetch } from '../utils/api';
+import { authFetch, safeJson } from '../utils/api';
 
 type Student = { id: number; firstName: string; lastName: string; classId: number };
 type ClassItem = { id: number; name: string; _count: { students: number } };
@@ -24,26 +24,33 @@ export default function Attendance() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    authFetch('/api/classes').then(r => r.json()).then(setClasses);
+    authFetch('/api/classes')
+      .then((r) => safeJson<ClassItem[]>(r))
+      .then(setClasses)
+      .catch(() => {});
   }, []);
 
   const loadStudentsAndAttendance = useCallback(async () => {
     if (!selectedClass || !date) return;
-    const [studRes, attRes] = await Promise.all([
-      authFetch(`/api/students`),
-      authFetch(`/api/attendance?classId=${selectedClass}&date=${date}`)
-    ]);
-    const allStudents: Student[] = await studRes.json();
-    const classStudents = allStudents.filter(s => s.classId === parseInt(selectedClass));
-    const existing: { studentId: number; status: string }[] = await attRes.json();
+    try {
+      const [studRes, attRes] = await Promise.all([
+        authFetch(`/api/students`),
+        authFetch(`/api/attendance?classId=${selectedClass}&date=${date}`)
+      ]);
+      const allStudents = await safeJson<Student[]>(studRes);
+      const classStudents = allStudents.filter(s => s.classId === parseInt(selectedClass));
+      const existing = await safeJson<{ studentId: number; status: string }[]>(attRes);
 
-    const map: StatusMap = {};
-    classStudents.forEach(s => { map[s.id] = 'PRESENT'; });
-    existing.forEach(r => { map[r.studentId] = r.status as 'PRESENT' | 'ABSENT' | 'LATE'; });
+      const map: StatusMap = {};
+      classStudents.forEach(s => { map[s.id] = 'PRESENT'; });
+      existing.forEach(r => { map[r.studentId] = r.status as 'PRESENT' | 'ABSENT' | 'LATE'; });
 
-    setStudents(classStudents);
-    setStatuses(map);
-    setSaved(false);
+      setStudents(classStudents);
+      setStatuses(map);
+      setSaved(false);
+    } catch {
+      // transient error: keep the previous view instead of crashing the page.
+    }
   }, [selectedClass, date]);
 
   useEffect(() => { loadStudentsAndAttendance(); }, [loadStudentsAndAttendance]);

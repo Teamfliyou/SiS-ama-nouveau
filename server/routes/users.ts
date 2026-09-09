@@ -49,17 +49,28 @@ router.put(
     if (id === currentUserId) {
       throw new AppError(400, 'Vous ne pouvez pas modifier votre propre rôle');
     }
-    const target = await prisma.user.findUnique({ where: { id } });
-    if (!target) throw new AppError(404, 'Utilisateur introuvable');
+    // Checks run inside a transaction with a post-write verification so that two
+    // concurrent demotions can never leave the system without an ADMIN: if the
+    // post-check sees zero ADMIN it aborts and the demotion is rolled back.
+    const user = await prisma.$transaction(async (tx) => {
+      const target = await tx.user.findUnique({ where: { id } });
+      if (!target) throw new AppError(404, 'Utilisateur introuvable');
 
-    // Never leave the system without at least one ADMIN.
-    if (target.role === 'ADMIN' && role === 'STAFF') {
-      const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
-      if (adminCount <= 1) {
-        throw new AppError(400, 'Impossible de rétrograder le dernier administrateur');
+      if (target.role === 'ADMIN' && role === 'STAFF') {
+        const adminCount = await tx.user.count({ where: { role: 'ADMIN' } });
+        if (adminCount <= 1) {
+          throw new AppError(400, 'Impossible de rétrograder le dernier administrateur');
+        }
       }
-    }
-    const user = await prisma.user.update({ where: { id }, data: { role }, select: SAFE_USER_SELECT });
+      const updated = await tx.user.update({ where: { id }, data: { role }, select: SAFE_USER_SELECT });
+      if (target.role === 'ADMIN' && role === 'STAFF') {
+        const adminCount = await tx.user.count({ where: { role: 'ADMIN' } });
+        if (adminCount === 0) {
+          throw new AppError(400, 'Impossible de rétrograder le dernier administrateur');
+        }
+      }
+      return updated;
+    });
     res.json(user);
   })
 );
@@ -73,15 +84,21 @@ router.delete(
     if (id === currentUserId) {
       throw new AppError(400, 'Vous ne pouvez pas supprimer votre propre compte');
     }
-    const target = await prisma.user.findUnique({ where: { id } });
-    if (!target) throw new AppError(404, 'Utilisateur introuvable');
-    if (target.role === 'ADMIN') {
-      const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
-      if (adminCount <= 1) {
+    await prisma.$transaction(async (tx) => {
+      const target = await tx.user.findUnique({ where: { id } });
+      if (!target) throw new AppError(404, 'Utilisateur introuvable');
+      if (target.role === 'ADMIN') {
+        const adminCount = await tx.user.count({ where: { role: 'ADMIN' } });
+        if (adminCount <= 1) {
+          throw new AppError(400, 'Impossible de supprimer le dernier administrateur');
+        }
+      }
+      await tx.user.delete({ where: { id } });
+      const adminCount = await tx.user.count({ where: { role: 'ADMIN' } });
+      if (adminCount === 0) {
         throw new AppError(400, 'Impossible de supprimer le dernier administrateur');
       }
-    }
-    await prisma.user.delete({ where: { id } });
+    });
     res.json({ success: true });
   })
 );

@@ -33,6 +33,13 @@ export function createApp(): Express {
   app.disable('x-powered-by');
   app.use(helmet());
 
+  // Trust the direct reverse proxy ONLY when explicitly enabled. `req.ip` then
+  // resolves the real client address, keeping rate limiting correct behind a
+  // proxy (Railway). Never trust forwarded headers by default (spoofing).
+  if (process.env.TRUST_PROXY === 'true') {
+    app.set('trust proxy', 1);
+  }
+
   // CORS: strict allow-list. Never '*' for security reasons.
   const allowedOrigins = [
     ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : []),

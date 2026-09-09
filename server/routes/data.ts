@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { asyncHandler } from '../lib/errors';
-import { validate } from '../lib/validate';
+import { validate, isRealDateString } from '../lib/validate';
 import { normalizeKey, studentKey } from '../lib/dedupe';
 import { eurosToCents } from '../lib/money';
 
@@ -15,6 +15,10 @@ const router = Router();
 
 const MAX_ITEMS = 10_000;
 
+// Max value representable as a SQLite Int (2^31-1) in cents.
+const MAX_CENTS = 2_147_483_647;
+const MAX_EUROS = 21_474_836.47;
+
 const optionalString = z.string().trim().nullable().optional();
 const optionalPhone = z
   .string()
@@ -24,8 +28,31 @@ const optionalPhone = z
   .optional()
   .transform((v) => (v === null || v === undefined || v === '' ? null : v));
 
-const euroNumber = z.number().finite().gte(0).optional();
-const centsNumber = z.number().int().nonnegative().optional();
+const euroNumber = z
+  .number()
+  .finite()
+  .gte(0)
+  .max(MAX_EUROS)
+  .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, {
+    message: 'Le montant ne peut pas avoir plus de 2 décimales',
+  })
+  .optional();
+const centsNumber = z.number().int().nonnegative().max(MAX_CENTS).optional();
+
+// Accepts either a bare "YYYY-MM-DD" date or a full ISO datetime (what our own
+// v2 export emits), but rejects non-existing days such as 2026-02-31.
+const isParsableDateString = (value: string): boolean =>
+  isRealDateString(value.slice(0, 10)) && !Number.isNaN(Date.parse(value));
+
+const paymentDateSchema = z.string().max(40).optional().refine(
+  (v) => v === undefined || isParsableDateString(v),
+  { message: 'Date invalide' }
+);
+
+const attendanceDateSchema = z
+  .string()
+  .max(40)
+  .refine((v) => isRealDateString(v), { message: 'Date invalide (attendu YYYY-MM-DD)' });
 
 const importPayloadSchema = z.object({
   version: z.string().optional(),
@@ -79,7 +106,7 @@ const importPayloadSchema = z.object({
         method: optionalString.transform((v) => v || 'Espèces'),
         amount: euroNumber,
         amountCents: centsNumber,
-        date: z.string().optional(),
+        date: paymentDateSchema,
         student: z.object({ id: z.number().int() }).optional(),
       })
     )
@@ -88,7 +115,7 @@ const importPayloadSchema = z.object({
   attendances: z
     .array(
       z.object({
-        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date invalide'),
+        date: attendanceDateSchema,
         studentId: z.number().int().optional(),
         classId: z.number().int().optional(),
         status: z.enum(['PRESENT', 'ABSENT', 'LATE']).default('PRESENT'),
@@ -155,6 +182,7 @@ router.post(
       let attendancesCreated = 0;
       let studentsSkipped = 0;
       let teachersSkipped = 0;
+      let paymentsSkipped = 0;
 
       const classMap = new Map<string, number>(); // normalized name -> id
       const studentMap = new Map<number, number>(); // original id -> created/existing id
@@ -163,11 +191,31 @@ router.post(
 
       const existingClasses = await tx.class.findMany({ select: { id: true, name: true } });
       const existingStudents = await tx.student.findMany({ select: { id: true, firstName: true, lastName: true } });
-      const existingTeachers = await tx.teacher.findMany({ select: { id: true, firstName: true, lastName: true } });
+      const existingTeachers = await tx.teacher.findMany({
+        select: { id: true, firstName: true, lastName: true, email: true },
+      });
+      // Payments must not be duplicated when the same backup is restored twice:
+      // before creating one we check for an existing identical payment on the
+      // same student (same cents, same date, same method), and we merge against
+      // payments already present in the database. Same sign of a className match,
+      // the teacher keys use the unique email when it exists and fall back to the
+      // full name otherwise — the same key function is used to seed the set from
+      // the existing teachers, so a re-import never hits a unique-constraint error.
+      const existingPayments = await tx.payment.findMany({
+        select: { studentId: true, amountCents: true, method: true, date: true },
+      });
+
+      const paymentKey = (studentId: number, amountCents: number, method: string | null, date: Date | string): string =>
+        `${studentId}|${amountCents}|${normalizeKey(method ?? 'Espèces')}|${
+          date instanceof Date ? date.getTime() : new Date(date).getTime()
+        }`;
+      const seenPayments = new Set(
+        existingPayments.map((p) => paymentKey(p.studentId, p.amountCents, p.method, p.date))
+      );
 
       for (const c of existingClasses) classMap.set(normalizeKey(c.name), c.id);
       for (const s of existingStudents) studentsByKey.set(studentKey(s.firstName, s.lastName), s.id);
-      for (const t of existingTeachers) teachersByKey.add(studentKey(t.firstName, t.lastName));
+      for (const t of existingTeachers) teachersByKey.add(t.email ? normalizeKey(t.email) : studentKey(t.firstName, t.lastName));
 
       const seenClasses = new Set(classMap.keys());
       const seenTeachers = new Set(teachersByKey);
@@ -231,14 +279,24 @@ router.post(
 
       for (const p of payments) {
         const newStudentId = studentMap.get(p.studentId ?? -1) ?? studentMap.get(p.student?.id ?? -1);
-        if (newStudentId === undefined) continue;
+        if (newStudentId === undefined) {
+          paymentsSkipped++;
+          continue;
+        }
         const amountCents = p.amountCents ?? eurosToCents(p.amount ?? 0);
+        const date = p.date ? new Date(p.date) : new Date();
+        const key = paymentKey(newStudentId, amountCents, p.method ?? null, date);
+        if (seenPayments.has(key)) {
+          paymentsSkipped++;
+          continue;
+        }
+        seenPayments.add(key);
         await tx.payment.create({
           data: {
             amountCents,
             method: p.method ?? 'Espèces',
             studentId: newStudentId,
-            date: p.date ? new Date(p.date) : new Date(),
+            date,
           },
         });
         paymentsCreated++;
@@ -269,6 +327,7 @@ router.post(
         attendancesCreated,
         studentsSkipped,
         teachersSkipped,
+        paymentsSkipped,
       };
     });
 

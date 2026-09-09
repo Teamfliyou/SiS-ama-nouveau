@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
-import { validate, attendanceCreateSchema, parseId } from '../lib/validate';
+import { validate, attendanceCreateSchema, parseId, isRealDateString } from '../lib/validate';
 
 const router = Router();
 
@@ -14,7 +14,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const { classId, date } = req.query as { classId?: string; date?: string };
     if (!classId || !date) throw new AppError(400, 'classId et date requis');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new AppError(400, 'Date invalide (format YYYY-MM-DD)');
+    if (!isRealDateString(date)) throw new AppError(400, 'Date invalide (format YYYY-MM-DD)');
     const cid = parseId(classId, 'Identifiant de classe invalide');
     const records = await prisma.attendance.findMany({ where: { classId: cid, date } });
     res.json(records);

@@ -57,11 +57,11 @@ function createLimiter(config: { windowMs: number; max: number; key: KeyFn }) {
   return { middleware, bucketOf };
 }
 
-const getClientIp = (req: Request): string =>
-  (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ||
-  req.socket?.remoteAddress ||
-  req.ip ||
-  'unknown';
+// The IP used for rate limiting MUST come from Express' own view of the client
+// (`req.ip`), which honours the `trust proxy` setting. Reading `x-forwarded-for`
+// directly would let a client spoof an arbitrary IP and bypass the limiter.
+// When the app sits behind a reverse proxy, set TRUST_PROXY=true (see app.ts).
+const getClientIp = (req: Request): string => req.ip || req.socket?.remoteAddress || 'unknown';
 
 const envInt = (value: string | undefined, fallback: number): number => {
   const n = Number(value);

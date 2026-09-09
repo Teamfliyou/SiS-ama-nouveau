@@ -106,6 +106,15 @@ describe('classes, students, finances (exact cents) and attendance', () => {
 
     const badDate = await req.get('/api/attendance?classId=1&date=09/09/2026').set(auth(token));
     expect(badDate.status).toBe(400);
+
+    const impossibleDate = await req.get('/api/attendance?classId=1&date=2026-02-31').set(auth(token));
+    expect(impossibleDate.status).toBe(400);
+
+    const impossiblePost = await req
+      .post('/api/attendance')
+      .set(auth(token))
+      .send({ date: '2026-02-31', records: [{ studentId: stu.id, status: 'PRESENT' }] });
+    expect(impossiblePost.status).toBe(400);
   });
 
   it('rejects attendance for students without a class', async () => {

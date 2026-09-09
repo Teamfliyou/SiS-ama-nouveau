@@ -19,7 +19,7 @@ const csvStudentRowSchema = z.object({
   phone: z.string().trim().max(30).nullable().optional().transform((v) => v || null),
   className: z.string().trim().max(120).nullable().optional().transform((v) => v || null),
   tuitionFee: z
-    .union([z.number().finite().gte(0).max(100_000_000), z.null(), z.undefined()])
+    .union([z.number().finite().gte(0).max(21_474_836.47), z.null(), z.undefined()])
     .optional()
     .transform((v) => v ?? undefined),
 });

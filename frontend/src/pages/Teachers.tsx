@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { GraduationCap, Plus, Pencil, Trash2, X, Save, Mail, Phone, BookOpen, Eye, Loader2 } from 'lucide-react';
-import { authFetch } from '../utils/api';
+import { authFetch, safeJson } from '../utils/api';
 import { toast } from '../utils/toast';
 
 type Teacher = {
@@ -42,12 +42,15 @@ export default function Teachers() {
 
   useEffect(() => {
     fetchTeachers();
-    authFetch('/api/classes').then(r => r.json()).then(setClasses);
+    authFetch('/api/classes')
+      .then((r) => safeJson<ClassItem[]>(r))
+      .then(setClasses)
+      .catch(() => {});
   }, []);
 
   const fetchTeachers = async () => {
     const res = await authFetch('/api/teachers');
-    if (res.ok) setTeachers(await res.json());
+    if (res.ok) setTeachers(await safeJson<Teacher[]>(res));
   };
 
   const openCreate = () => { setEditingId(null); setForm(EMPTY); setError(''); setShowForm(true); };
