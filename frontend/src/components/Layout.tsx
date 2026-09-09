@@ -2,7 +2,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu,
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
-  ChevronDown, User, KeyRound, X, Eye, EyeOff
+  ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../utils/api';
@@ -49,6 +49,7 @@ export default function Layout() {
     { name: 'Professeurs',     href: '/teachers',     icon: GraduationCap },
     { name: 'Finances',        href: '/finances',     icon: CreditCard },
     { name: 'Appel',           href: '/attendance',   icon: ClipboardList },
+    { name: 'Feuilles d\'appel', href: '/attendance-sheets', icon: Printer },
     { name: 'Import CSV',      href: '/import-csv',   icon: UploadCloud },
     ...(isAdmin ? [{ name: 'Utilisateurs', href: '/users', icon: ShieldCheck }] : []),
   ];
