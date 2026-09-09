@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { CreditCard, Plus, Pencil, Trash2, X, Save, AlertCircle, CheckCircle2, Filter } from 'lucide-react';
-import { authFetch } from '../utils/api';
+import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
+import { formatCurrency } from '../utils/format';
+import { toast } from '../utils/toast';
 
 type Payment = {
   id: number;
@@ -36,18 +38,27 @@ export default function Finances() {
   }, []);
 
   const fetchPayments = async () => {
-    const res = await authFetch('/api/finances');
-    if (res.ok) setPayments(await res.json());
+    try {
+      setPayments(await safeJson<Payment[]>(await authFetch('/api/finances')));
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   };
 
   const fetchStudents = async () => {
-    const res = await authFetch('/api/students');
-    if (res.ok) setStudents(await res.json());
+    try {
+      setStudents(await safeJson<Student[]>(await authFetch('/api/students')));
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   };
 
   const fetchClasses = async () => {
-    const res = await authFetch('/api/classes');
-    if (res.ok) setClasses(await res.json());
+    try {
+      setClasses(await safeJson<ClassItem[]>(await authFetch('/api/classes')));
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   };
 
   const selectedStudent = students.find(s => s.id === parseInt(studentId));
@@ -67,22 +78,19 @@ export default function Finances() {
     if (!studentId && !editingId) return;
     setLoading(true);
     try {
-      if (editingId) {
-        // Edit mode
-        await authFetch(`/api/finances/${editingId}`, {
-          method: 'PUT',
-          body: JSON.stringify({ amount, method })
-        });
-      } else {
-        // Create mode
-        await authFetch('/api/finances', {
-          method: 'POST',
-          body: JSON.stringify({ amount, studentId, method })
-        });
-      }
+      const body = editingId
+        ? JSON.stringify({ amount, method })
+        : JSON.stringify({ amount, studentId, method });
+      const res = editingId
+        ? await authFetch(`/api/finances/${editingId}`, { method: 'PUT', body })
+        : await authFetch('/api/finances', { method: 'POST', body });
+      await safeJson(res);
+      toast.success(editingId ? 'Paiement mis à jour' : 'Paiement enregistré');
       resetForm();
       fetchPayments();
       fetchStudents(); // refresh balances
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -91,10 +99,13 @@ export default function Finances() {
   const handleDelete = async (id: number) => {
     if(!window.confirm("Voulez-vous vraiment supprimer ce paiement ?")) return;
     try {
-      await authFetch(`/api/finances/${id}`, { method: 'DELETE' });
+      await safeJson(await authFetch(`/api/finances/${id}`, { method: 'DELETE' }));
+      toast.success('Paiement supprimé');
       fetchPayments();
       fetchStudents();
-    } catch(err) { console.error(err); }
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   };
 
   const openEdit = (pay: Payment) => {
@@ -134,16 +145,16 @@ export default function Finances() {
                <div className="space-y-3">
                  <div className="flex justify-between text-xs">
                    <span className="text-slate-500">Total dû :</span>
-                   <span className="font-bold text-slate-700">{selectedStudent.totalAmountDue} €</span>
+                   <span className="font-bold text-slate-700">{formatCurrency(selectedStudent.totalAmountDue)}</span>
                  </div>
                  <div className="flex justify-between text-xs">
                    <span className="text-slate-500">Déjà payé :</span>
-                   <span className="font-bold text-emerald-600">+{selectedStudent.totalPaid} €</span>
+                   <span className="font-bold text-emerald-600">+{formatCurrency(selectedStudent.totalPaid)}</span>
                  </div>
                  <div className="pt-2 border-t border-blue-200 flex justify-between items-center">
                    <span className="text-xs font-bold text-slate-700">Reste à payer :</span>
                    <span className={`text-sm font-black ${selectedStudent.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>
-                     {selectedStudent.remaining} €
+                     {formatCurrency(selectedStudent.remaining)}
                    </span>
                  </div>
                </div>
@@ -283,7 +294,7 @@ export default function Finances() {
                          <div className="text-xs text-slate-400">{pay.student.class?.name || 'Sans classe'}</div>
                        </td>
                        <td className="px-6 py-4 whitespace-nowrap">
-                         <span className="text-sm font-black text-emerald-600">+{pay.amount} €</span>
+                         <span className="text-sm font-black text-emerald-600">+{formatCurrency(pay.amount)}</span>
                        </td>
                        <td className="px-6 py-4 whitespace-nowrap">
                          <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] uppercase font-black bg-slate-100 text-slate-500 border border-slate-200">

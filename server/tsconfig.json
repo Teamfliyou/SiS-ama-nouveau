@@ -9,6 +9,6 @@
     "outDir": "./dist",
     "rootDir": "./"
   },
-  "include": ["index.ts", "lib/**/*.ts", "middleware/**/*.ts", "routes/**/*.ts"],
+  "include": ["index.ts", "lib/**/*.ts", "middleware/**/*.ts", "routes/**/*.ts", "test/**/*.ts", "global-setup.ts", "vitest.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

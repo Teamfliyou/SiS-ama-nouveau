@@ -1,6 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
+import { getJwtSecret } from '../lib/secret';
+import { AppError } from '../lib/errors';
+import { asyncHandler } from '../lib/errors';
 
 export interface AuthPayload {
   userId: number;
@@ -17,30 +20,33 @@ declare global {
   }
 }
 
-export async function authenticate(req: Request, res: Response, next: NextFunction) {
+/** Verifies the JWT and reloads the account from the DB for up-to-date permissions. */
+export const authenticate = asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required' });
+    throw new AppError(401, 'Authentification requise');
   }
   const token = authHeader.slice(7);
+  let payload: AuthPayload;
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET!) as AuthPayload;
-    // The account may have been deleted, demoted or promoted since the token was issued.
-    // Always re-read the user so permissions stay in sync with the database.
-    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-    req.user = { userId: user.id, email: user.email, role: user.role };
-    next();
+    payload = jwt.verify(token, getJwtSecret()) as AuthPayload;
   } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    // Invalid or expired token (jwt.verify throws on both).
+    throw new AppError(401, 'Token invalide ou expiré');
   }
-}
+  // The account may have been deleted, demoted or promoted since the token was issued.
+  // Always re-read the user so permissions stay in sync with the database.
+  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+  if (!user) {
+    throw new AppError(401, 'Token invalide ou expiré');
+  }
+  req.user = { userId: user.id, email: user.email, role: user.role };
+  next();
+});
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.user?.role !== 'ADMIN') {
-    return res.status(403).json({ error: 'Accès administrateur requis' });
+    return void res.status(403).json({ error: 'Accès administrateur requis' });
   }
   next();
 }

@@ -1,71 +1,91 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
-import { normalizeKey } from '../lib/dedupe';
+import { asyncHandler, AppError } from '../lib/errors';
+import { validate, classCreateSchema, parseId } from '../lib/validate';
+import { eurosToCents, centsToEuros } from '../lib/money';
 
 const router = Router();
 
 router.use(authenticate);
 
-// GET /api/classes
-router.get('/', async (req, res) => {
-  try {
-    const classes = await prisma.class.findMany({ include: { _count: { select: { students: true } } } });
-    res.json(classes);
-  } catch {
-    res.status(500).json({ error: 'Une erreur est survenue' });
-  }
+const mapClass = (cls: {
+  id: number;
+  name: string;
+  tuitionFeeCents: number;
+  createdAt: Date;
+  _count?: { students: number };
+}) => ({
+  id: cls.id,
+  name: cls.name,
+  tuitionFeeCents: cls.tuitionFeeCents,
+  tuitionFee: centsToEuros(cls.tuitionFeeCents),
+  createdAt: cls.createdAt,
+  _count: { students: cls._count?.students ?? 0 },
 });
+
+type ClassItem = {
+  id: number;
+  name: string;
+  tuitionFeeCents: number;
+  createdAt: Date;
+  _count?: { students: number };
+};
+
+// GET /api/classes
+router.get(
+  '/',
+  asyncHandler(async (_req, res) => {
+    const classes = await prisma.class.findMany({
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { students: true } } },
+    });
+    res.json(classes.map(mapClass));
+  })
+);
 
 // POST /api/classes
-router.post('/', async (req, res) => {
-  const { name, tuitionFee } = req.body;
-  const trimmed = typeof name === 'string' ? name.trim() : '';
-  if (!trimmed) return res.status(400).json({ error: 'Nom requis' });
-  try {
-    const all = await prisma.class.findMany({ select: { name: true } });
-    if (all.some(c => normalizeKey(c.name) === normalizeKey(trimmed))) {
-      return res.status(409).json({ error: 'Cette classe existe déjà' });
-    }
-    const newClass = await prisma.class.create({
-      data: { name: trimmed, tuitionFee: tuitionFee ? parseFloat(tuitionFee) : 0 }
+router.post(
+  '/',
+  validate(classCreateSchema),
+  asyncHandler(async (req, res) => {
+    const { name, tuitionFee } = req.body as { name: string; tuitionFee?: number };
+    const cls = await prisma.class.create({
+      data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0) },
     });
-    res.status(201).json(newClass);
-  } catch {
-    res.status(500).json({ error: 'Une erreur est survenue' });
-  }
-});
+    res.status(201).json(mapClass(cls));
+  })
+);
 
 // PUT /api/classes/:id
-router.put('/:id', async (req, res) => {
-  const id = parseInt(String(req.params.id));
-  const { name, tuitionFee } = req.body;
-  try {
-    if (name && String(name).trim()) {
-      const others = await prisma.class.findMany({ where: { NOT: { id } }, select: { name: true } });
-      if (others.some(c => normalizeKey(c.name) === normalizeKey(String(name)))) {
-        return res.status(409).json({ error: 'Cette classe existe déjà' });
-      }
-    }
+router.put(
+  '/:id',
+  validate(classCreateSchema),
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id, 'Identifiant de classe invalide');
+    const { name, tuitionFee } = req.body as { name: string; tuitionFee?: number };
     const cls = await prisma.class.update({
       where: { id },
-      data: { name, tuitionFee: tuitionFee ? parseFloat(tuitionFee) : 0 }
+      data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0) },
     });
-    res.json(cls);
-  } catch {
-    res.status(500).json({ error: 'Une erreur est survenue' });
-  }
-});
+    res.json(mapClass(cls));
+  })
+);
 
 // DELETE /api/classes/:id
-router.delete('/:id', async (req, res) => {
-  const id = String(req.params.id);
-  try {
-    await prisma.class.delete({ where: { id: parseInt(id) } });
+// Deletion behaviour (documented): students are unassigned (Student.classId -> null),
+// teacher assignments are cleared (Teacher.classId -> null), and the attendance
+// history of that class is removed (Attendance.classId cascade). This matches the
+// confirmation message shown in the UI.
+router.delete(
+  '/:id',
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id, 'Identifiant de classe invalide');
+    const existing = await prisma.class.findUnique({ where: { id } });
+    if (!existing) throw new AppError(404, 'Classe introuvable');
+    await prisma.class.delete({ where: { id } });
     res.json({ success: true });
-  } catch {
-    res.status(500).json({ error: 'Une erreur est survenue' });
-  }
-});
+  })
+);
 
 export default router;

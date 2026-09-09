@@ -16,13 +16,13 @@ model User {
 }
 
 model Class {
-  id          Int          @id @default(autoincrement())
-  name        String       @unique
-  tuitionFee  Float        @default(0)
-  students    Student[]
-  attendances Attendance[]
-  teachers    Teacher[]
-  createdAt   DateTime     @default(now())
+  id              Int          @id @default(autoincrement())
+  name            String       @unique
+  tuitionFeeCents Int          @default(0)
+  students        Student[]
+  attendances     Attendance[]
+  teachers        Teacher[]
+  createdAt       DateTime     @default(now())
 }
 
 model Student {
@@ -38,12 +38,12 @@ model Student {
 }
 
 model Payment {
-  id        Int      @id @default(autoincrement())
-  amount    Float
-  date      DateTime @default(now())
-  studentId Int
-  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  method    String?  @default("Espèces")
+  id          Int      @id @default(autoincrement())
+  amountCents Int
+  date        DateTime @default(now())
+  studentId   Int
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  method      String?  @default("Espèces")
 }
 
 model Teacher {

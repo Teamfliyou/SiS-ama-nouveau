@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Shield, ShieldCheck, Trash2, Plus, X, Eye, EyeOff, UserCog } from 'lucide-react';
-import { authFetch } from '../utils/api';
+import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
+import { toast } from '../utils/toast';
 
 type User = { id: number; email: string; role: string; createdAt: string };
 
@@ -18,8 +19,11 @@ export default function UsersAdmin() {
   useEffect(() => { fetchUsers(); }, []);
 
   const fetchUsers = async () => {
-    const res = await authFetch('/api/users');
-    if (res.ok) setUsers(await res.json());
+    try {
+      setUsers(await safeJson<User[]>(await authFetch('/api/users')));
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -31,27 +35,41 @@ export default function UsersAdmin() {
         method: 'POST',
         body: JSON.stringify({ email, password, role })
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
+      await safeJson(res);
+      toast.success('Compte créé');
       setEmail(''); setPassword(''); setRole('STAFF');
       setShowForm(false);
       fetchUsers();
+    } catch (err) {
+      setError(apiErrorMessage(err));
     } finally { setLoading(false); }
   };
 
   const toggleRole = async (user: User) => {
     const newRole = user.role === 'ADMIN' ? 'STAFF' : 'ADMIN';
-    const res = await authFetch(`/api/users/${user.id}/role`, {
-      method: 'PUT',
-      body: JSON.stringify({ role: newRole })
-    });
-    if (res.ok) fetchUsers();
+    try {
+      const res = await authFetch(`/api/users/${user.id}/role`, {
+        method: 'PUT',
+        body: JSON.stringify({ role: newRole })
+      });
+      await safeJson(res);
+      toast.success(`Rôle modifié : ${user.email}`);
+      fetchUsers();
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   };
 
   const handleDelete = async (user: User) => {
     if (!window.confirm(`Supprimer l'utilisateur ${user.email} ?`)) return;
-    const res = await authFetch(`/api/users/${user.id}`, { method: 'DELETE' });
-    if (res.ok) fetchUsers();
+    try {
+      const res = await authFetch(`/api/users/${user.id}`, { method: 'DELETE' });
+      await safeJson(res);
+      toast.success(`Utilisateur supprimé : ${user.email}`);
+      fetchUsers();
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   };
 
   return (

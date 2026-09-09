@@ -1,11 +1,12 @@
 import { useState, useRef } from 'react';
 import { UploadCloud, FileText, ArrowRight, CheckCircle2, AlertTriangle, X, RefreshCw, Download } from 'lucide-react';
-import { authFetch } from '../utils/api';
+import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
+import { formatCurrency } from '../utils/format';
 import { parseCSV, downloadCsv, downloadExcel } from '../utils/csv';
 
 type Step = 'upload' | 'mapping' | 'preview' | 'done';
 type ColumnMap = { firstName: string; lastName: string; className: string; tuitionFee: string; phone: string };
-type ImportResult = { createdStudents: number; createdClasses: number; skipped?: number };
+type ImportResult = { createdStudents: number; createdClasses: number; skipped?: number; errors?: { row: number; reason: string }[] };
 
 export default function CsvImport() {
   const [step, setStep] = useState<Step>('upload');
@@ -67,10 +68,12 @@ export default function CsvImport() {
         method: 'POST',
         body: JSON.stringify({ rows: mappedRows })
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
+      const data = await safeJson<ImportResult>(res);
       setResult(data);
       setStep('done');
+    } catch (err) {
+      setError(apiErrorMessage(err));
+      setStep('preview');
     } finally { setImporting(false); }
   };
 
@@ -283,7 +286,7 @@ export default function CsvImport() {
                       <td className="px-5 py-3 text-sm font-medium text-slate-800">{row.firstName || <span className="text-red-400 italic">manquant</span>}</td>
                       <td className="px-5 py-3 text-sm text-slate-700">{row.lastName || <span className="text-red-400 italic">manquant</span>}</td>
                       <td className="px-5 py-3 text-sm text-slate-500">{row.className || <span className="text-slate-300 italic">—</span>}</td>
-                      {columnMap.tuitionFee && <td className="px-5 py-3 text-sm text-emerald-600 font-semibold">{row.tuitionFee ?? '—'} €</td>}
+                      {columnMap.tuitionFee && <td className="px-5 py-3 text-sm text-emerald-600 font-semibold">{row.tuitionFee ? formatCurrency(row.tuitionFee) : '—'}</td>}
                       {columnMap.phone && <td className="px-5 py-3 text-sm text-slate-500">{row.phone || <span className="text-slate-300 italic">—</span>}</td>}
                     </tr>
                   ))}
@@ -331,6 +334,19 @@ export default function CsvImport() {
               </div>
             )}
           </div>
+          {result.errors && result.errors.length > 0 && (
+            <div className="text-left mx-auto max-w-md bg-red-50 border border-red-100 rounded-2xl p-4 text-sm">
+              <p className="font-bold text-red-700 mb-2 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4" />
+                {result.errors.length} ligne{result.errors.length > 1 ? 's' : ''} ignorée{result.errors.length > 1 ? 's' : ''}
+              </p>
+              <ul className="space-y-1">
+                {result.errors.map((e, i) => (
+                  <li key={i} className="text-red-600 text-xs">Ligne {e.row} — {e.reason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <button
             onClick={reset}
             className="mx-auto flex items-center gap-2 px-6 py-2.5 bg-slate-100 text-slate-700 font-semibold text-sm rounded-xl hover:bg-slate-200 transition-colors"

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API_BASE } from '../utils/api';
+import { API_BASE, clearAuth } from '../utils/api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -24,16 +24,21 @@ export default function Login() {
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
-      const data = await response.json();
-      if (response.ok) {
+      const text = await response.text();
+      const data: { token?: string; email?: string; role?: string; error?: string } = text
+        ? JSON.parse(text)
+        : {};
+      if (response.ok && data.token) {
+        clearAuth();
         localStorage.setItem('token', data.token);
-        localStorage.setItem('user', data.email || email);
+        localStorage.setItem('user', data.email || email.trim());
         localStorage.setItem('role', data.role || '');
         navigate('/dashboard');
       } else {
-        setMessage('Erreur: ' + data.error);
+        // 401 (bad credentials) and 429 (rate limited) both carry a server message.
+        setMessage(data.error || `Erreur (${response.status})`);
       }
     } catch {
       setMessage('Erreur de connexion au serveur.');

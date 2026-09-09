@@ -5,7 +5,8 @@ import {
   Eye, EyeOff, CheckCircle2, AlertTriangle, RefreshCw, Settings
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authFetch } from '../utils/api';
+import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
+import { formatCurrency } from '../utils/format';
 
 type Stats = { studentsCount: number; classesCount: number; teachersCount: number; totalPayments: number };
 type ImportResult = { classesCreated: number; studentsCreated: number; teachersCreated: number; paymentsCreated: number; attendancesCreated: number };
@@ -39,14 +40,20 @@ export default function Dashboard() {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    authFetch('/api/stats').then(r => r.json()).then(setStats).catch(console.error);
+    (async () => {
+      try {
+        setStats(await safeJson<Stats>(await authFetch('/api/stats')));
+      } catch {
+        // stats are non-critical; the page stays usable.
+      }
+    })();
   }, []);
 
   const statCards = [
     { name: 'Élèves Inscrits',   value: stats.studentsCount,              icon: Users,          color: 'bg-blue-500',    link: '/students' },
     { name: 'Classes Actives',   value: stats.classesCount,               icon: BookOpen,       color: 'bg-indigo-500',  link: '/classes' },
     { name: 'Professeurs',       value: stats.teachersCount,              icon: GraduationCap,  color: 'bg-purple-500',  link: '/teachers' },
-    { name: 'Paiements totaux',  value: `${stats.totalPayments} €`,       icon: TrendingUp,     color: 'bg-emerald-500', link: '/finances' },
+    { name: 'Paiements totaux',  value: formatCurrency(stats.totalPayments),       icon: TrendingUp,     color: 'bg-emerald-500', link: '/finances' },
   ];
 
   // ── Password change ──
@@ -58,11 +65,13 @@ export default function Dashboard() {
         method: 'PUT',
         body: JSON.stringify({ currentPassword: curPwd, newPassword: newPwd })
       });
-      const data = await res.json();
-      if (!res.ok) { setPwdMsg({ type: 'error', text: data.error }); return; }
+      const data = await safeJson<{ error?: string }>(res);
+      if (data.error) { setPwdMsg({ type: 'error', text: data.error }); return; }
       setPwdMsg({ type: 'success', text: 'Mot de passe modifié avec succès !' });
       setCurPwd(''); setNewPwd('');
       setTimeout(() => { setPwdOpen(false); setPwdMsg(null); }, 2000);
+    } catch (err) {
+      setPwdMsg({ type: 'error', text: apiErrorMessage(err) });
     } finally { setPwdLoading(false); }
   };
 
@@ -75,11 +84,13 @@ export default function Dashboard() {
         method: 'POST',
         body: JSON.stringify({ email: adminEmail, password: adminPwd, role: 'ADMIN' })
       });
-      const data = await res.json();
-      if (!res.ok) { setAdminMsg({ type: 'error', text: data.error }); return; }
+      const data = await safeJson<{ error?: string }>(res);
+      if (data.error) { setAdminMsg({ type: 'error', text: data.error }); return; }
       setAdminMsg({ type: 'success', text: `Compte ${adminEmail} créé !` });
       setAdminEmail(''); setAdminPwd('');
       setTimeout(() => { setAdminOpen(false); setAdminMsg(null); }, 2000);
+    } catch (err) {
+      setAdminMsg({ type: 'error', text: apiErrorMessage(err) });
     } finally { setAdminLoading(false); }
   };
 
@@ -88,6 +99,7 @@ export default function Dashboard() {
     setExporting(true);
     try {
       const res = await authFetch('/api/export');
+      if (!res.ok) { await safeJson(res); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -107,12 +119,11 @@ export default function Dashboard() {
       const text = await file.text();
       const json = JSON.parse(text);
       const res = await authFetch('/api/import/full', { method: 'POST', body: JSON.stringify(json) });
-      const data = await res.json();
-      if (!res.ok) { setImportError(data.error); return; }
+      const data = await safeJson<ImportResult>(res);
       setImportResult(data);
-      authFetch('/api/stats').then(r => r.json()).then(setStats);
-    } catch {
-      setImportError('Fichier JSON invalide.');
+      safeJson<Stats>(await authFetch('/api/stats')).then(setStats).catch(() => {});
+    } catch (err) {
+      setImportError(err instanceof SyntaxError ? 'Fichier JSON invalide.' : apiErrorMessage(err));
     } finally {
       setImporting(false);
       if (importRef.current) importRef.current.value = '';

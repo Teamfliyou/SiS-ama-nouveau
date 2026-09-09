@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { BookOpen, Plus, Pencil, Trash2, X, Save } from 'lucide-react';
-import { authFetch } from '../utils/api';
+import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
+import { formatCurrency } from '../utils/format';
+import { toast } from '../utils/toast';
 
 type ClassItem = { id: number; name: string; tuitionFee: number; _count: { students: number } };
 
@@ -16,10 +18,11 @@ export default function Classes() {
   }, []);
 
   const fetchClasses = async () => {
-    const res = await authFetch('/api/classes');
-    if (res.ok) {
-      const data = await res.json();
+    try {
+      const data = await safeJson<ClassItem[]>(await authFetch('/api/classes'));
       setClasses(data);
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
     }
   };
 
@@ -27,19 +30,16 @@ export default function Classes() {
     e.preventDefault();
     setLoading(true);
     try {
-      if (editingId) {
-        await authFetch(`/api/classes/${editingId}`, {
-          method: 'PUT',
-          body: JSON.stringify({ name, tuitionFee })
-        });
-      } else {
-        await authFetch('/api/classes', {
-          method: 'POST',
-          body: JSON.stringify({ name, tuitionFee })
-        });
-      }
+      const body = JSON.stringify({ name, tuitionFee: tuitionFee === '' ? 0 : Number(tuitionFee) });
+      const res = editingId
+        ? await authFetch(`/api/classes/${editingId}`, { method: 'PUT', body })
+        : await authFetch('/api/classes', { method: 'POST', body });
+      await safeJson(res);
+      toast.success(editingId ? 'Classe mise à jour' : 'Classe créée');
       resetForm();
       fetchClasses();
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -48,9 +48,12 @@ export default function Classes() {
   const handleDelete = async (id: number) => {
     if(!window.confirm("Voulez-vous vraiment supprimer cette classe ? Les élèves associés seront mis en 'Sans classe' et l'historique d'appel (présences) de cette classe sera supprimé.")) return;
     try {
-      await authFetch(`/api/classes/${id}`, { method: 'DELETE' });
+      await safeJson(await authFetch(`/api/classes/${id}`, { method: 'DELETE' }));
+      toast.success('Classe supprimée');
       fetchClasses();
-    } catch(err) { console.error(err); }
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   };
 
   const openEdit = (cls: ClassItem) => {
@@ -138,8 +141,8 @@ export default function Classes() {
                  ) : (
                    classes.map((cls) => (
                      <tr key={cls.id} className="hover:bg-slate-50/50 group transition-colors">
-                       <td className="px-6 py-4 font-medium text-slate-900">{cls.name}</td>
-                       <td className="px-6 py-4 text-emerald-600 font-semibold">{cls.tuitionFee} €</td>
+<td className="px-6 py-4 font-medium text-slate-900">{cls.name}</td>
+                        <td className="px-6 py-4 text-emerald-600 font-semibold">{formatCurrency(cls.tuitionFee)}</td>
                        <td className="px-6 py-4 text-slate-500">{cls._count.students} élèves</td>
                        <td className="px-6 py-4 text-right space-x-2">
                          <button 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Users, Plus, Pencil, Trash2, X, Save, Search, SlidersHorizontal, ChevronDown, Eye, Loader2 } from 'lucide-react';
-import { authFetch } from '../utils/api';
+import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
+import { formatCurrency } from '../utils/format';
 import { toast } from '../utils/toast';
 
 type Student = {
@@ -43,13 +44,19 @@ export default function Students() {
   }, []);
 
   const fetchStudents = async () => {
-    const res = await authFetch('/api/students');
-    if (res.ok) setStudents(await res.json());
+    try {
+      setStudents(await safeJson<Student[]>(await authFetch('/api/students')));
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   };
 
   const fetchClasses = async () => {
-    const res = await authFetch('/api/classes');
-    if (res.ok) setClasses(await res.json());
+    try {
+      setClasses(await safeJson<ClassItem[]>(await authFetch('/api/classes')));
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -202,7 +209,7 @@ export default function Students() {
                   required
                 >
                   <option value="">Sélectionner une classe</option>
-                  {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c.tuitionFee}€)</option>)}
+                  {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({formatCurrency(c.tuitionFee)})</option>)}
                 </select>
                 <p className="text-xs text-slate-400 mt-1">Les frais de l'élève dépendent de sa classe.</p>
               </div>
@@ -349,11 +356,11 @@ export default function Students() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-sm font-medium text-slate-700">Dû : {st.totalAmountDue} €</span>
+                          <span className="text-sm font-medium text-slate-700">Dû : {formatCurrency(st.totalAmountDue)}</span>
                           <span className={`text-xs font-semibold ${st.remaining <= 0 ? 'text-emerald-600' : 'text-orange-500'}`}>
                             {st.remaining <= 0
                               ? '✓ Entièrement payé'
-                              : `Reste : ${st.remaining} €`
+                              : `Reste : ${formatCurrency(st.remaining)}`
                             }
                           </span>
                           {st.totalAmountDue > 0 && (
@@ -415,7 +422,7 @@ export default function Students() {
                     {detailsStudent.firstName} <span className="uppercase">{detailsStudent.lastName}</span>
                   </p>
                   <p className="text-sm text-slate-400">
-                    {detailsStudent.class ? `Classe ${detailsStudent.class.name} — Frais : ${detailsStudent.class.tuitionFee} €` : 'Sans classe'}
+                    {detailsStudent.class ? `Classe ${detailsStudent.class.name} — Frais : ${formatCurrency(detailsStudent.class.tuitionFee)}` : 'Sans classe'}
                   </p>
                   {detailsStudent.phone && <p className="text-sm text-slate-400">Tél : {detailsStudent.phone}</p>}
                 </div>
@@ -430,15 +437,15 @@ export default function Students() {
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-slate-50 rounded-xl p-3 text-center">
                   <p className="text-xs font-semibold text-slate-400 uppercase">Total dû</p>
-                  <p className="text-lg font-black text-slate-700">{detailsStudent.totalAmountDue} €</p>
+                  <p className="text-lg font-black text-slate-700">{formatCurrency(detailsStudent.totalAmountDue)}</p>
                 </div>
                 <div className="bg-emerald-50 rounded-xl p-3 text-center">
                   <p className="text-xs font-semibold text-emerald-500 uppercase">Payé</p>
-                  <p className="text-lg font-black text-emerald-600">{detailsStudent.totalPaid} €</p>
+                  <p className="text-lg font-black text-emerald-600">{formatCurrency(detailsStudent.totalPaid)}</p>
                 </div>
                 <div className={`rounded-xl p-3 text-center ${detailsStudent.remaining <= 0 ? 'bg-emerald-50' : 'bg-orange-50'}`}>
                   <p className={`text-xs font-semibold uppercase ${detailsStudent.remaining <= 0 ? 'text-emerald-500' : 'text-orange-400'}`}>Reste</p>
-                  <p className={`text-lg font-black ${detailsStudent.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>{detailsStudent.remaining} €</p>
+                  <p className={`text-lg font-black ${detailsStudent.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>{formatCurrency(detailsStudent.remaining)}</p>
                 </div>
               </div>
 
@@ -454,7 +461,7 @@ export default function Students() {
                       .map((p: Student['payments'][number]) => (
                         <li key={p.id} className="flex items-center justify-between px-4 py-2.5">
                           <div>
-                            <p className="text-sm font-semibold text-slate-700">+{p.amount} €</p>
+                            <p className="text-sm font-semibold text-slate-700">+{formatCurrency(p.amount)}</p>
                             <p className="text-xs text-slate-400">{p.method}</p>
                           </div>
                           <span className="text-xs text-slate-400">

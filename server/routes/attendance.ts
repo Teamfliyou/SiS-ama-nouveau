@@ -1,64 +1,77 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
+import { asyncHandler, AppError } from '../lib/errors';
+import { validate, attendanceCreateSchema, parseId } from '../lib/validate';
 
 const router = Router();
 
 router.use(authenticate);
 
 // GET /api/attendance?classId=&date=
-router.get('/', async (req, res) => {
-  const { classId, date } = req.query as { classId?: string; date?: string };
-  if (!classId || !date) return res.status(400).json({ error: 'classId et date requis' });
-  try {
-    const records = await prisma.attendance.findMany({
-      where: { classId: parseInt(classId), date }
-    });
+router.get(
+  '/',
+  asyncHandler(async (req, res) => {
+    const { classId, date } = req.query as { classId?: string; date?: string };
+    if (!classId || !date) throw new AppError(400, 'classId et date requis');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new AppError(400, 'Date invalide (format YYYY-MM-DD)');
+    const cid = parseId(classId, 'Identifiant de classe invalide');
+    const records = await prisma.attendance.findMany({ where: { classId: cid, date } });
     res.json(records);
-  } catch {
-    res.status(500).json({ error: 'Une erreur est survenue' });
-  }
-});
-
-// POST /api/attendance
-router.post('/', async (req, res) => {
-  const { date, records } = req.body as {
-    date: string;
-    records: { studentId: number; classId: number; status: string }[];
-  };
-  if (!date || !Array.isArray(records)) return res.status(400).json({ error: 'Données invalides' });
-  try {
-    await Promise.all(
-      records.map(r =>
-        prisma.attendance.upsert({
-          where: { date_studentId: { date, studentId: r.studentId } },
-          update: { status: r.status },
-          create: { date, studentId: r.studentId, classId: r.classId, status: r.status }
-        })
-      )
-    );
-    res.json({ success: true, saved: records.length });
-  } catch {
-    res.status(500).json({ error: 'Une erreur est survenue' });
-  }
-});
+  })
+);
 
 // GET /api/attendance/history?classId=
-router.get('/history', async (req, res) => {
-  const { classId } = req.query as { classId?: string };
-  if (!classId) return res.status(400).json({ error: 'classId requis' });
-  try {
+router.get(
+  '/history',
+  asyncHandler(async (req, res) => {
+    const { classId } = req.query as { classId?: string };
+    if (!classId) throw new AppError(400, 'classId requis');
+    const cid = parseId(classId, 'Identifiant de classe invalide');
     const history = await prisma.attendance.groupBy({
       by: ['date'],
-      where: { classId: parseInt(classId) },
+      where: { classId: cid },
       _count: { status: true },
       orderBy: { date: 'desc' },
-      take: 30
+      take: 30,
     });
     res.json(history);
-  } catch {
-    res.status(500).json({ error: 'Une erreur est survenue' });
-  }
-});
+  })
+);
+
+// POST /api/attendance
+// The class used for a record is the student's CURRENT class at save time, so that
+// attendance history stays coherent when a student changes classes. Records for
+// students without a class are rejected. Statuses are restricted to the enum.
+router.post(
+  '/',
+  validate(attendanceCreateSchema),
+  asyncHandler(async (req, res) => {
+    const { date, records } = req.body as {
+      date: string;
+      records: { studentId: number; classId?: number | null; status: 'PRESENT' | 'ABSENT' | 'LATE' }[];
+    };
+
+    const result = await prisma.$transaction(async (tx) => {
+      let saved = 0;
+      for (const r of records) {
+        const student = await tx.student.findUnique({ where: { id: r.studentId }, select: { id: true, classId: true } });
+        if (!student) throw new AppError(400, `Élève inconnu (id ${r.studentId})`);
+        if (student.classId === null) {
+          throw new AppError(400, `L'élève ${r.studentId} n'a pas de classe, appel impossible`);
+        }
+        await tx.attendance.upsert({
+          where: { date_studentId: { date, studentId: r.studentId } },
+          update: { status: r.status, classId: student.classId },
+          create: { date, studentId: r.studentId, classId: student.classId, status: r.status },
+        });
+        saved++;
+      }
+      return saved;
+    });
+
+    res.json({ success: true, saved: result });
+  })
+);
 
 export default router;
