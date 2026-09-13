@@ -2,7 +2,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu,
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
-  ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer
+  ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer, Settings
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../utils/api';
@@ -52,6 +52,7 @@ export default function Layout() {
     { name: 'Feuilles d\'appel', href: '/attendance-sheets', icon: Printer },
     { name: 'Import CSV',      href: '/import-csv',   icon: UploadCloud },
     ...(isAdmin ? [{ name: 'Utilisateurs', href: '/users', icon: ShieldCheck }] : []),
+    { name: 'Paramètres',      href: '/settings',     icon: Settings },
   ];
 
   const handleLogout = () => {
@@ -85,7 +86,7 @@ export default function Layout() {
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-30 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 shadow-sm ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`app-sidebar fixed inset-y-0 left-0 z-30 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 shadow-sm ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-full flex flex-col">
           <div className="flex items-center justify-center h-20 border-b border-slate-100 px-6">
             <img src="/logo.png" alt="ASSO AMA SIS" className="h-14 w-auto object-contain" />
@@ -115,9 +116,9 @@ export default function Layout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 h-20 flex items-center justify-between px-4 sm:px-6 lg:px-8 z-10 sticky top-0">
+        <header className="app-header bg-white/80 backdrop-blur-md border-b border-slate-200 h-20 flex items-center justify-between px-4 sm:px-6 lg:px-8 z-10 sticky top-0">
           <div className="flex items-center">
-            <button onClick={() => setSidebarOpen(true)} className="p-2 mr-4 text-slate-500 rounded-lg lg:hidden hover:bg-slate-100">
+            <button onClick={() => setSidebarOpen(true)} aria-label="Ouvrir le menu" className="p-2 mr-4 text-slate-500 rounded-lg lg:hidden hover:bg-slate-100">
               <Menu className="h-6 w-6" />
             </button>
             <div className="relative hidden sm:block">
@@ -128,7 +129,7 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center space-x-3">
-            <button className="relative p-2 text-slate-400 hover:text-slate-500 transition-colors rounded-full hover:bg-slate-100">
+            <button aria-label="Notifications" className="relative p-2 text-slate-400 hover:text-slate-500 transition-colors rounded-full hover:bg-slate-100">
               <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
               <Bell className="h-6 w-6" />
             </button>
@@ -211,7 +212,7 @@ export default function Layout() {
       {/* ── Change password modal ── */}
       {showPwdModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
+          <div className="glass-modal bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-5">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary/10 rounded-xl">
@@ -219,7 +220,7 @@ export default function Layout() {
                 </div>
                 <h3 className="text-lg font-bold text-slate-800">Changer le mot de passe</h3>
               </div>
-              <button onClick={() => setShowPwdModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowPwdModal(false)} aria-label="Fermer" className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
