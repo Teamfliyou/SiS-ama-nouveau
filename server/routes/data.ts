@@ -15,7 +15,7 @@ const router = Router();
 
 const MAX_ITEMS = 10_000;
 
-// Max value representable as a SQLite Int (2^31-1) in cents.
+// Max value representable as a 32-bit database integer (2^31-1) in cents.
 const MAX_CENTS = 2_147_483_647;
 const MAX_EUROS = 21_474_836.47;
 

@@ -5,9 +5,13 @@ node_modules
 .env.*
 !.env.example
 
-# SQLite database files
+# Local/stray database files (the app now uses PostgreSQL via DATABASE_URL)
 *.db
 *.db-journal
+
+# PostgreSQL backup dumps
+backups/
+*.dump
 
 /generated/prisma
 /dist

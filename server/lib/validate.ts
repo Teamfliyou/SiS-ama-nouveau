@@ -66,7 +66,8 @@ export const parseId = (raw: string | string[] | undefined, label = 'Identifiant
 };
 
 /** Money in euros accepted from clients: finite, positive-ish, max 2 decimals.
- * Capped so that converting to integer cents never overflows SQLite's Int (2^31-1). */
+ * Capped so that converting to integer cents never overflows the database's
+ * 32-bit integer columns (2^31-1). */
 const euroAmount = (min: number, label: string) =>
   z
     .number(label)

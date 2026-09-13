@@ -1,7 +1,4 @@
 import { defineConfig } from 'vitest/config';
-import path from 'node:path';
-
-const serverRoot = __dirname;
 
 export default defineConfig({
   test: {
@@ -12,8 +9,15 @@ export default defineConfig({
     testTimeout: 30_000,
     exclude: ['dist/**', 'node_modules/**'],
     env: {
-      // Dedicated SQLite database for tests (removed and re-migrated at startup).
-      DATABASE_URL: 'file:' + path.join(serverRoot, 'prisma', 'test.db'),
+      // Dedicated PostgreSQL database for tests. Override in CI with
+      // TEST_DATABASE_URL, otherwise the local development database name
+      // `sisama_test` is used (must exist, see README → Tests).
+      // The password below is the LOCAL-ONLY placeholder used by the README
+      // setup instructions — never a real one. Override TEST_DATABASE_URL
+      // when your local PostgreSQL uses a different password.
+      DATABASE_URL:
+        process.env.TEST_DATABASE_URL ??
+        'postgresql://sisama_user:mot_de_passe@localhost:5432/sisama_test?schema=public',
       // Strong, non-placeholder secret (never the production value).
       JWT_SECRET: 'test-only-secret-at-least-16-chars-1234567890',
       // Login limiting: high per-IP ceiling so the whole suite can log in from
