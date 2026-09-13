@@ -1,0 +1,79 @@
+name: sis-ama
+
+services:
+  # ─── PostgreSQL (jamais exposé publiquement) ─────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sisama
+      POSTGRES_USER: sisama
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Aucun `ports:` → la base n'est accessible que depuis le réseau Docker interne.
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sisama -d sisama"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ─── Backend Express / Prisma ────────────────────────────────────────
+  backend:
+    build:
+      context: ./server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      # Prisma lit cette variable pour se connecter à PostgreSQL.
+      DATABASE_URL: postgresql://sisama:${POSTGRES_PASSWORD}@postgres:5432/sisama
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant dans .env}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      CORS_ORIGIN: ${FRONTEND_URL:-http://localhost}
+      TRUST_PROXY: "true"
+      LOGIN_RATE_MAX: ${LOGIN_RATE_MAX:-5}
+      LOGIN_RATE_IP_MAX: ${LOGIN_RATE_IP_MAX:-20}
+      LOGIN_RATE_WINDOW_MS: ${LOGIN_RATE_WINDOW_MS:-900000}
+      RATE_MAX_GENERAL: ${RATE_MAX_GENERAL:-300}
+      RATE_WINDOW_GENERAL_MS: ${RATE_WINDOW_GENERAL_MS:-900000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "5000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:5000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ─── Frontend React + reverse proxy nginx (port public 80) ──────────
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
