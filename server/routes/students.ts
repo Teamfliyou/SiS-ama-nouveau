@@ -90,6 +90,10 @@ const studentInclude = {
   },
 } as const;
 
+/** Relit l'élève avec ses relations (l'historique d'inscriptions est écrit après le create/update). */
+const reReadStudent = async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0], id: number) =>
+  tx.student.findUniqueOrThrow({ where: { id }, include: studentInclude });
+
 // GET /api/students
 router.get(
   '/',
@@ -136,10 +140,9 @@ router.post(
     const student = await prisma.$transaction(async (tx) => {
       const created = await tx.student.create({
         data: { firstName, lastName, phone, classId, familyId },
-        include: studentInclude,
       });
       await syncEnrollment(tx, created.id, classId);
-      return created;
+      return reReadStudent(tx, created.id);
     });
     res.status(201).json(mapStudent(student as StudentRow));
   })
@@ -172,10 +175,9 @@ router.put(
       const updated = await tx.student.update({
         where: { id },
         data: { firstName, lastName, phone, classId, familyId },
-        include: studentInclude,
       });
       if (updated.classId !== existing.classId) await syncEnrollment(tx, id, classId);
-      return updated;
+      return reReadStudent(tx, id);
     });
     res.json(mapStudent(student as StudentRow));
   })

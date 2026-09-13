@@ -92,14 +92,13 @@ router.post(
           phone,
           classId: assignments[0] ?? null,
         },
-        include: teacherInclude,
       });
       if (assignments.length > 0) {
         await tx.teacherClass.createMany({
           data: assignments.map((classId) => ({ teacherId: created.id, classId, subject })),
         });
       }
-      return created;
+      return tx.teacher.findUniqueOrThrow({ where: { id: created.id }, include: teacherInclude });
     });
     res.status(201).json(mapTeacher(teacher as TeacherRow));
   })
@@ -131,7 +130,7 @@ router.put(
           data: assignments.map((classId) => ({ teacherId: id, classId, subject })),
         });
       }
-      return tx.teacher.update({
+      await tx.teacher.update({
         where: { id },
         data: {
           firstName,
@@ -141,8 +140,8 @@ router.put(
           phone,
           classId: assignments[0] ?? null,
         },
-        include: teacherInclude,
       });
+      return tx.teacher.findUniqueOrThrow({ where: { id }, include: teacherInclude });
     });
     res.json(mapTeacher(teacher as TeacherRow));
   })

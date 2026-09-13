@@ -42,6 +42,10 @@ router.get(
   })
 );
 
+const classWriteInclude = {
+  schoolYear: { select: { id: true, name: true } },
+} as const;
+
 // POST /api/classes
 router.post(
   '/',
@@ -54,6 +58,7 @@ router.post(
     };
     const cls = await prisma.class.create({
       data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0), schoolYearId },
+      include: classWriteInclude,
     });
     res.status(201).json(mapClass(cls as ClassItem));
   })
@@ -75,6 +80,7 @@ router.put(
     const cls = await prisma.class.update({
       where: { id },
       data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0), schoolYearId },
+      include: classWriteInclude,
     });
     res.json(mapClass(cls as ClassItem));
   })
