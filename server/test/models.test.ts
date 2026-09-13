@@ -205,10 +205,10 @@ describe('full v3 export -> import round trip', () => {
     const token = await adminToken();
     const backup = await buildBackup(token);
     expect(backup.version).toBe('3');
-    expect(backup.schoolYears).toHaveLength(1);
-    expect(backup.families).toHaveLength(1);
-    expect(backup.enrollments).toHaveLength(1);
-    expect(backup.teachers[0].classes).toHaveLength(2);
+    expect(backup.data.schoolYears).toHaveLength(1);
+    expect(backup.data.families).toHaveLength(1);
+    expect(backup.data.enrollments).toHaveLength(1);
+    expect(backup.data.teachers[0].classes).toHaveLength(2);
 
     await resetDb();
     const fresh = await adminToken();

@@ -15,9 +15,9 @@ describe('full export / import (ADMIN only)', () => {
     const res = await req.get('/api/export').set(auth(token));
     expect(res.status).toBe(200);
     expect(res.body.version).toBe('3');
-    expect(res.body.classes[0].tuitionFeeCents).toBe(15000);
-    expect(res.body.students[0].firstName).toBe('Zoe');
-    expect(res.body.payments[0].amountCents).toBe(6000);
+    expect(res.body.data.classes[0].tuitionFeeCents).toBe(15000);
+    expect(res.body.data.students[0].firstName).toBe('Zoe');
+    expect(res.body.data.payments[0].amountCents).toBe(6000);
     expect(JSON.stringify(res.body)).not.toMatch(/password/i);
     expect(JSON.stringify(res.body)).not.toMatch(/token/i);
   });
@@ -173,7 +173,7 @@ describe('full import merge semantics (idempotent restore)', () => {
 
     const backup = (await req.get('/api/export').set(auth(token))).body;
     expect(backup.version).toBe('3');
-    expect(backup.payments).toHaveLength(1);
+    expect(backup.data.payments).toHaveLength(1);
 
     const res = await req.post('/api/import/full').set(auth(token)).send(backup);
     expect(res.status).toBe(200);
