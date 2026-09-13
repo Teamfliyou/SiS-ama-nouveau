@@ -14,6 +14,8 @@ const mapClass = (cls: {
   name: string;
   tuitionFeeCents: number;
   createdAt: Date;
+  schoolYearId: number | null;
+  schoolYear?: { id: number; name: string } | null;
   _count?: { students: number };
 }) => ({
   id: cls.id,
@@ -21,16 +23,12 @@ const mapClass = (cls: {
   tuitionFeeCents: cls.tuitionFeeCents,
   tuitionFee: centsToEuros(cls.tuitionFeeCents),
   createdAt: cls.createdAt,
+  schoolYearId: cls.schoolYearId,
+  schoolYear: cls.schoolYear ? { id: cls.schoolYear.id, name: cls.schoolYear.name } : null,
   _count: { students: cls._count?.students ?? 0 },
 });
 
-type ClassItem = {
-  id: number;
-  name: string;
-  tuitionFeeCents: number;
-  createdAt: Date;
-  _count?: { students: number };
-};
+type ClassItem = Parameters<typeof mapClass>[0];
 
 // GET /api/classes
 router.get(
@@ -38,7 +36,7 @@ router.get(
   asyncHandler(async (_req, res) => {
     const classes = await prisma.class.findMany({
       orderBy: { name: 'asc' },
-      include: { _count: { select: { students: true } } },
+      include: { _count: { select: { students: true } }, schoolYear: { select: { id: true, name: true } } },
     });
     res.json(classes.map(mapClass));
   })
@@ -49,11 +47,15 @@ router.post(
   '/',
   validate(classCreateSchema),
   asyncHandler(async (req, res) => {
-    const { name, tuitionFee } = req.body as { name: string; tuitionFee?: number };
+    const { name, tuitionFee, schoolYearId } = req.body as {
+      name: string;
+      tuitionFee?: number;
+      schoolYearId?: number | null;
+    };
     const cls = await prisma.class.create({
-      data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0) },
+      data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0), schoolYearId },
     });
-    res.status(201).json(mapClass(cls));
+    res.status(201).json(mapClass(cls as ClassItem));
   })
 );
 
@@ -63,12 +65,18 @@ router.put(
   validate(classCreateSchema),
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de classe invalide');
-    const { name, tuitionFee } = req.body as { name: string; tuitionFee?: number };
+    const { name, tuitionFee, schoolYearId } = req.body as {
+      name: string;
+      tuitionFee?: number;
+      schoolYearId?: number | null;
+    };
+    const existing = await prisma.class.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) throw new AppError(404, 'Classe introuvable');
     const cls = await prisma.class.update({
       where: { id },
-      data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0) },
+      data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0), schoolYearId },
     });
-    res.json(mapClass(cls));
+    res.json(mapClass(cls as ClassItem));
   })
 );
 

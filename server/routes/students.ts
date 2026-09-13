@@ -5,6 +5,8 @@ import { asyncHandler, AppError } from '../lib/errors';
 import { validate, studentCreateSchema, parseId } from '../lib/validate';
 import { centsToEuros } from '../lib/money';
 import { toLabelMethod } from '../lib/paymentMethods';
+import { syncEnrollment } from '../lib/enrollments';
+import { toYmd } from '../lib/dates';
 
 const router = Router();
 
@@ -16,9 +18,21 @@ type StudentRow = {
   lastName: string;
   phone: string | null;
   classId: number | null;
+  familyId: number | null;
   createdAt: Date;
   class: { id: number; name: string; tuitionFeeCents: number } | null;
+  family?: { id: number; name: string | null; phone: string | null } | null;
   payments: { id: number; amountCents: number; date: Date; method: string | null }[];
+  enrollments?: {
+    id: number;
+    classId: number;
+    schoolYearId: number | null;
+    isActive: boolean;
+    startDate: Date | null;
+    endDate: Date | null;
+    class: { id: number; name: string } | null;
+    schoolYear?: { id: number; name: string } | null;
+  }[];
 };
 
 const mapStudent = (s: StudentRow) => {
@@ -31,10 +45,24 @@ const mapStudent = (s: StudentRow) => {
     lastName: s.lastName,
     phone: s.phone,
     classId: s.classId,
+    familyId: s.familyId,
     createdAt: s.createdAt,
     class: s.class
       ? { id: s.class.id, name: s.class.name, tuitionFeeCents: s.class.tuitionFeeCents }
       : null,
+    family: s.family
+      ? { id: s.family.id, name: s.family.name, phone: s.family.phone }
+      : null,
+    enrollments: (s.enrollments ?? []).map((e) => ({
+      id: e.id,
+      classId: e.classId,
+      schoolYearId: e.schoolYearId,
+      isActive: e.isActive,
+      startDate: e.startDate ? toYmd(e.startDate) : null,
+      endDate: e.endDate ? toYmd(e.endDate) : null,
+      class: e.class ? { id: e.class.id, name: e.class.name } : null,
+      schoolYear: e.schoolYear ? { id: e.schoolYear.id, name: e.schoolYear.name } : null,
+    })),
     payments: s.payments.map((p) => ({
       id: p.id,
       amountCents: p.amountCents,
@@ -52,15 +80,36 @@ const mapStudent = (s: StudentRow) => {
   };
 };
 
+const studentInclude = {
+  class: true,
+  family: { select: { id: true, name: true, phone: true } },
+  payments: true,
+  enrollments: {
+    include: { class: { select: { id: true, name: true } }, schoolYear: { select: { id: true, name: true } } },
+    orderBy: { startDate: 'desc' },
+  },
+} as const;
+
 // GET /api/students
 router.get(
   '/',
   asyncHandler(async (_req, res) => {
     const students = await prisma.student.findMany({
-      include: { class: true, payments: true },
+      include: studentInclude,
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
     res.json((students as StudentRow[]).map(mapStudent));
+  })
+);
+
+// GET /api/students/:id
+router.get(
+  '/:id',
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id, 'Identifiant d\'élève invalide');
+    const student = await prisma.student.findUnique({ where: { id }, include: studentInclude });
+    if (!student) throw new AppError(404, 'Élève introuvable');
+    res.json(mapStudent(student as StudentRow));
   })
 );
 
@@ -69,15 +118,28 @@ router.post(
   '/',
   validate(studentCreateSchema),
   asyncHandler(async (req, res) => {
-    const { firstName, lastName, phone, classId } = req.body as {
+    const { firstName, lastName, phone, classId, familyId } = req.body as {
       firstName: string;
       lastName: string;
       phone: string | null;
       classId: number | null;
+      familyId: number | null;
     };
-    const student = await prisma.student.create({
-      data: { firstName, lastName, phone, classId },
-      include: { class: true, payments: true },
+    if (classId) {
+      const cls = await prisma.class.findUnique({ where: { id: classId }, select: { id: true } });
+      if (!cls) throw new AppError(400, 'Classe introuvable');
+    }
+    if (familyId) {
+      const fam = await prisma.family.findUnique({ where: { id: familyId }, select: { id: true } });
+      if (!fam) throw new AppError(400, 'Famille introuvable');
+    }
+    const student = await prisma.$transaction(async (tx) => {
+      const created = await tx.student.create({
+        data: { firstName, lastName, phone, classId, familyId },
+        include: studentInclude,
+      });
+      await syncEnrollment(tx, created.id, classId);
+      return created;
     });
     res.status(201).json(mapStudent(student as StudentRow));
   })
@@ -89,18 +151,31 @@ router.put(
   validate(studentCreateSchema),
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant d\'élève invalide');
-    const { firstName, lastName, phone, classId } = req.body as {
+    const { firstName, lastName, phone, classId, familyId } = req.body as {
       firstName: string;
       lastName: string;
       phone: string | null;
       classId: number | null;
+      familyId: number | null;
     };
-    const existing = await prisma.student.findUnique({ where: { id } });
+    const existing = await prisma.student.findUnique({ where: { id }, select: { id: true, classId: true } });
     if (!existing) throw new AppError(404, 'Élève introuvable');
-    const student = await prisma.student.update({
-      where: { id },
-      data: { firstName, lastName, phone, classId },
-      include: { class: true, payments: true },
+    if (classId) {
+      const cls = await prisma.class.findUnique({ where: { id: classId }, select: { id: true } });
+      if (!cls) throw new AppError(400, 'Classe introuvable');
+    }
+    if (familyId) {
+      const fam = await prisma.family.findUnique({ where: { id: familyId }, select: { id: true } });
+      if (!fam) throw new AppError(400, 'Famille introuvable');
+    }
+    const student = await prisma.$transaction(async (tx) => {
+      const updated = await tx.student.update({
+        where: { id },
+        data: { firstName, lastName, phone, classId, familyId },
+        include: studentInclude,
+      });
+      if (updated.classId !== existing.classId) await syncEnrollment(tx, id, classId);
+      return updated;
     });
     res.json(mapStudent(student as StudentRow));
   })
