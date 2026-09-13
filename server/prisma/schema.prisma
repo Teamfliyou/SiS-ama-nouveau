@@ -51,19 +51,20 @@ model User {
 }
 
 model Class {
-  id               Int            @id @default(autoincrement())
-  name             String         @unique
-  tuitionFeeCents  Int            @default(0)
-  schoolYearId     Int?
-  schoolYear       SchoolYear?    @relation(fields: [schoolYearId], references: [id], onDelete: SetNull)
-  students         Student[]
-  attendances      Attendance[]
-  teachers         Teacher[]
-  teacherClasses   TeacherClass[]
-  enrollments      Enrollment[]
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id              Int            @id @default(autoincrement())
+  name            String
+  tuitionFeeCents Int            @default(0)
+  schoolYearId    Int?
+  schoolYear      SchoolYear?    @relation(fields: [schoolYearId], references: [id], onDelete: SetNull)
+  students        Student[]
+  attendances     Attendance[]
+  teachers        Teacher[]
+  teacherClasses  TeacherClass[]
+  enrollments     Enrollment[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
+  @@unique([name, schoolYearId])
   @@index([schoolYearId])
 }
 
@@ -104,17 +105,17 @@ model Payment {
 }
 
 model Teacher {
-  id             Int              @id @default(autoincrement())
+  id             Int            @id @default(autoincrement())
   firstName      String
   lastName       String
   subject        String?
-  email          String?          @unique
+  email          String?        @unique
   phone          String?
   classId        Int?
-  class          Class?           @relation(fields: [classId], references: [id])
+  class          Class?         @relation(fields: [classId], references: [id])
   teacherClasses TeacherClass[]
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@index([lastName, firstName])
 }

@@ -5,6 +5,8 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler } from '../lib/errors';
 import { validate } from '../lib/validate';
 import { normalizeKey, studentKey } from '../lib/dedupe';
+import { findClassIdByName } from '../lib/classes';
+import { getActiveSchoolYearId } from '../lib/schoolYears';
 import { eurosToCents } from '../lib/money';
 
 const router = Router();
@@ -68,18 +70,11 @@ router.post(
       let createdClasses = 0;
       let skipped = 0;
 
-      const classMap = new Map<string, number>();
-      const seenClasses = new Set<string>();
+      const activeYearId = await getActiveSchoolYearId(tx);
+      const classMap = new Map<string, number>(); // normalized name -> class (reuse within this file)
       const seenStudents = new Set<string>();
 
-      const [existingStudents, existingClasses] = await Promise.all([
-        tx.student.findMany({ select: { id: true, firstName: true, lastName: true } }),
-        tx.class.findMany({ select: { id: true, name: true } }),
-      ]);
-      for (const c of existingClasses) {
-        classMap.set(normalizeKey(c.name), c.id);
-        seenClasses.add(normalizeKey(c.name));
-      }
+      const existingStudents = await tx.student.findMany({ select: { id: true, firstName: true, lastName: true } });
       for (const s of existingStudents) seenStudents.add(studentKey(s.firstName, s.lastName));
 
       for (const [i, row] of rows.entries()) {
@@ -108,14 +103,16 @@ router.post(
         const className = row.className ?? null;
         if (className) {
           const key = normalizeKey(className);
-          if (seenClasses.has(key)) {
-            classId = classMap.get(key) ?? null;
+          let id = classMap.get(key) ?? null;
+          if (id === null) id = await findClassIdByName(tx, className, activeYearId);
+          if (id !== null) {
+            classId = id;
+            classMap.set(key, id);
           } else {
             const cls = await tx.class.create({
               data: { name: className, tuitionFeeCents: eurosToCents(row.tuitionFee ?? 0) },
             });
             classMap.set(key, cls.id);
-            seenClasses.add(key);
             createdClasses++;
             classId = cls.id;
           }
@@ -160,18 +157,11 @@ router.post(
       let createdClasses = 0;
       let skipped = 0;
 
-      const classMap = new Map<string, number>();
-      const seenClasses = new Set<string>();
+      const activeYearId = await getActiveSchoolYearId(tx);
+      const classMap = new Map<string, number>(); // normalized name -> class (reuse within this file)
       const seenTeachers = new Set<string>();
 
-      const [existingTeachers, existingClasses] = await Promise.all([
-        tx.teacher.findMany({ select: { id: true, firstName: true, lastName: true, email: true } }),
-        tx.class.findMany({ select: { id: true, name: true } }),
-      ]);
-      for (const c of existingClasses) {
-        classMap.set(normalizeKey(c.name), c.id);
-        seenClasses.add(normalizeKey(c.name));
-      }
+      const existingTeachers = await tx.teacher.findMany({ select: { id: true, firstName: true, lastName: true, email: true } });
       for (const t of existingTeachers) {
         seenTeachers.add(t.email ? normalizeKey(t.email) : studentKey(t.firstName, t.lastName));
       }
@@ -201,12 +191,14 @@ router.post(
         const className = row.className ?? null;
         if (className) {
           const ckey = normalizeKey(className);
-          if (seenClasses.has(ckey)) {
-            classId = classMap.get(ckey) ?? null;
+          let id = classMap.get(ckey) ?? null;
+          if (id === null) id = await findClassIdByName(tx, className, activeYearId);
+          if (id !== null) {
+            classId = id;
+            classMap.set(ckey, id);
           } else {
             const cls = await tx.class.create({ data: { name: className } });
             classMap.set(ckey, cls.id);
-            seenClasses.add(ckey);
             createdClasses++;
             classId = cls.id;
           }

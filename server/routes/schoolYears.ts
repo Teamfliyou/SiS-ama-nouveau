@@ -43,8 +43,11 @@ router.post(
       active?: boolean;
     };
     const year = await prisma.$transaction(async (tx) => {
+      // Toujours inséré inactif : l'activation passe par setActiveSchoolYear,
+      // seule voie qui garantit l'unicité (index partiel PostgreSQL) même en cas
+      // d'année active déjà présente.
       const created = await tx.schoolYear.create({
-        data: { name, startDate: new Date(`${startDate}T00:00:00.000Z`), endDate: new Date(`${endDate}T00:00:00.000Z`), active: active ?? false },
+        data: { name, startDate: new Date(`${startDate}T00:00:00.000Z`), endDate: new Date(`${endDate}T00:00:00.000Z`), active: false },
       });
       if (active) await setActiveSchoolYear(tx, created.id);
       return created;
@@ -68,13 +71,15 @@ router.put(
     const exists = await prisma.schoolYear.findUnique({ where: { id } });
     if (!exists) throw new AppError(404, 'Année scolaire introuvable');
     const year = await prisma.$transaction(async (tx) => {
+      // `active: true` n'est jamais écrit directement (conflit possible avec
+      // l'index unique partiel) : l'activation passe par setActiveSchoolYear.
       const updated = await tx.schoolYear.update({
         where: { id },
         data: {
           name,
           startDate: startDate ? new Date(`${startDate}T00:00:00.000Z`) : undefined,
           endDate: endDate ? new Date(`${endDate}T00:00:00.000Z`) : undefined,
-          active,
+          ...(active === true ? {} : active === false ? { active: false } : {}),
         },
       });
       if (active) await setActiveSchoolYear(tx, id);

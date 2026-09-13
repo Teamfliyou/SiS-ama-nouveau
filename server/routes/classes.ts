@@ -46,6 +46,22 @@ const classWriteInclude = {
   schoolYear: { select: { id: true, name: true } },
 } as const;
 
+/** Un même nom de classe est autorisé dans des années différentes, interdit dans la même. */
+const duplicateClassMessage = (name: string, schoolYearId: number | null): string =>
+  schoolYearId !== null
+    ? `Une classe « ${name} » existe déjà pour cette année scolaire`
+    : `Une classe « ${name} » existe déjà`;
+
+const findDuplicateClass = (
+  name: string,
+  schoolYearId: number | null,
+  excludeId?: number
+) =>
+  prisma.class.findFirst({
+    where: { name, schoolYearId: schoolYearId ?? null, ...(excludeId ? { NOT: { id: excludeId } } : {}) },
+    select: { id: true },
+  });
+
 // POST /api/classes
 router.post(
   '/',
@@ -56,8 +72,11 @@ router.post(
       tuitionFee?: number;
       schoolYearId?: number | null;
     };
+    const normalizedYear = schoolYearId ?? null;
+    const dup = await findDuplicateClass(name, normalizedYear);
+    if (dup) throw new AppError(409, duplicateClassMessage(name, normalizedYear));
     const cls = await prisma.class.create({
-      data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0), schoolYearId },
+      data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0), schoolYearId: normalizedYear },
       include: classWriteInclude,
     });
     res.status(201).json(mapClass(cls as ClassItem));
@@ -77,9 +96,12 @@ router.put(
     };
     const existing = await prisma.class.findUnique({ where: { id }, select: { id: true } });
     if (!existing) throw new AppError(404, 'Classe introuvable');
+    const normalizedYear = schoolYearId ?? null;
+    const dup = await findDuplicateClass(name, normalizedYear, id);
+    if (dup) throw new AppError(409, duplicateClassMessage(name, normalizedYear));
     const cls = await prisma.class.update({
       where: { id },
-      data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0), schoolYearId },
+      data: { name, tuitionFeeCents: eurosToCents(tuitionFee ?? 0), schoolYearId: normalizedYear },
       include: classWriteInclude,
     });
     res.json(mapClass(cls as ClassItem));

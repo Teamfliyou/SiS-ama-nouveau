@@ -5,6 +5,8 @@ import { authenticate, requireAdmin } from '../middleware/auth';
 import { asyncHandler } from '../lib/errors';
 import { validate, isRealDateString } from '../lib/validate';
 import { normalizeKey, studentKey } from '../lib/dedupe';
+import { classKey } from '../lib/classes';
+import { getActiveSchoolYearId, setActiveSchoolYear } from '../lib/schoolYears';
 import { eurosToCents } from '../lib/money';
 import { toEnumMethod, toLabelMethod } from '../lib/paymentMethods';
 import { ymdToDate, toYmd } from '../lib/dates';
@@ -82,6 +84,11 @@ const importPayloadSchema = z.object({
         name: z.string().trim().min(1).max(120),
         tuitionFee: euroNumber,
         tuitionFeeCents: centsNumber,
+        schoolYear: z
+          .object({ id: z.number().int().optional(), name: z.string().trim().min(1).max(120) })
+          .nullable()
+          .optional(),
+        schoolYearId: z.number().int().nullable().optional(),
       })
     )
     .max(MAX_ITEMS)
@@ -332,7 +339,6 @@ router.post(
       let teachersSkipped = 0;
       let paymentsSkipped = 0;
 
-      const classMap = new Map<string, number>(); // normalized name -> id
       const yearMap = new Map<string, number>(); // normalized name -> id
       const familyIdByKey = new Map<string, number>();
       const studentIdByKey = new Map<string, number>();
@@ -340,8 +346,8 @@ router.post(
 
       const [existingClasses, existingYears, existingFamilies, existingStudents, existingTeachers, existingPayments] =
         await Promise.all([
-          tx.class.findMany({ select: { id: true, name: true } }),
-          tx.schoolYear.findMany({ select: { id: true, name: true } }),
+          tx.class.findMany({ select: { id: true, name: true, schoolYearId: true } }),
+          tx.schoolYear.findMany({ select: { id: true, name: true, startDate: true } }),
           tx.family.findMany({ select: { id: true, name: true, phone: true, email: true } }),
           tx.student.findMany({ select: { id: true, firstName: true, lastName: true } }),
           tx.teacher.findMany({ select: { id: true, firstName: true, lastName: true, email: true } }),
@@ -355,15 +361,10 @@ router.post(
       const seenPayments = new Set(
         existingPayments.map((p) => paymentKey(p.studentId, p.amountCents, p.method, p.date))
       );
-      const seenClasses = new Set<string>();
       const seenYears = new Set<string>();
       const seenFamilies = new Set<string>();
       const seenTeachers = new Set<string>();
 
-      for (const c of existingClasses) {
-        classMap.set(normalizeKey(c.name), c.id);
-        seenClasses.add(normalizeKey(c.name));
-      }
       for (const y of existingYears) {
         yearMap.set(normalizeKey(y.name), y.id);
         seenYears.add(normalizeKey(y.name));
@@ -376,42 +377,92 @@ router.post(
       for (const t of existingTeachers)
         seenTeachers.add(t.email ? normalizeKey(t.email) : studentKey(t.firstName, t.lastName));
 
-      const resolveClassId = (className?: string): number | null =>
-        className ? classMap.get(normalizeKey(className)) ?? null : null;
-
       // ── Années scolaires (cible de rattachement des classes) ──────────
+      const yearNameById = new Map<number, string>();
+      for (const y of existingYears) yearNameById.set(y.id, y.name);
+
       for (const y of schoolYears) {
         const key = normalizeKey(y.name);
         if (seenYears.has(key)) continue;
+        // Toujours insérée inactive : l'activation passe par setActiveSchoolYear
+        // (index unique partiel → jamais deux années actives en même temps).
         const created = await tx.schoolYear.create({
           data: {
             name: y.name,
             startDate: ymdToDate(y.startDate!.slice(0, 10)),
             endDate: ymdToDate(y.endDate!.slice(0, 10)),
-            active: y.active ?? false,
+            active: false,
           },
         });
         yearMap.set(key, created.id);
+        yearNameById.set(created.id, y.name);
         seenYears.add(key);
         schoolYearsCreated++;
       }
-      if (schoolYears.some((y) => y.active)) {
-        await tx.schoolYear.updateMany({ where: { active: true }, data: { active: false } });
-        for (const y of schoolYears) {
-          if (!y.active) continue;
-          const id = yearMap.get(normalizeKey(y.name));
-          if (id) await tx.schoolYear.update({ where: { id }, data: { active: true } });
-        }
+
+      // Règle déterministe : parmi les années du fichier marquées active, celle
+      // dont startDate est la plus récente devient l'unique année active ; toutes
+      // les autres (du fichier comme de la base) passent à inactive.
+      const activeCandidates = schoolYears
+        .filter((y) => y.active)
+        .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''));
+      if (activeCandidates.length > 0) {
+        const chosen = activeCandidates[activeCandidates.length - 1];
+        const id = yearMap.get(normalizeKey(chosen.name));
+        if (id) await setActiveSchoolYear(tx, id);
+      }
+      const activeYearId = await getActiveSchoolYearId(tx);
+
+      // ── Classes (identifiées par nom + année scolaire) ────────────────
+      // classByKey : (nom, année) -> id (déduplication + résolution précise).
+      // classesByName : nom -> [{ id, yearId }] (résolution par année active).
+      const classByKey = new Map<string, number>();
+      const classesByName = new Map<string, { id: number; yearId: number | null }[]>();
+      const payloadClassIdToNewId = new Map<number, number>();
+
+      const registerClass = (id: number, name: string, yearId: number | null, schoolYearName: string | null) => {
+        const refs = classesByName.get(normalizeKey(name)) ?? [];
+        refs.push({ id, yearId });
+        classesByName.set(normalizeKey(name), refs);
+        classByKey.set(classKey(name, schoolYearName), id);
+      };
+
+      const resolveClassByNameYear = (name: string, schoolYearName?: string | null): number | null =>
+        classByKey.get(classKey(name, schoolYearName ?? null)) ?? null;
+
+      const resolveClassByName = (name?: string | null): number | null => {
+        if (!name) return null;
+        const refs = classesByName.get(normalizeKey(name));
+        if (!refs || refs.length === 0) return null;
+        const active = refs.find((r) => r.yearId === activeYearId);
+        if (active) return active.id;
+        return refs.length === 1 ? refs[0].id : null;
+      };
+
+      for (const c of existingClasses) {
+        registerClass(
+          c.id,
+          c.name,
+          c.schoolYearId,
+          c.schoolYearId !== null ? (yearNameById.get(c.schoolYearId) ?? null) : null
+        );
       }
 
-      // ── Classes ───────────────────────────────────────────────────────
       for (const c of classes) {
-        const key = normalizeKey(c.name);
-        if (seenClasses.has(key)) continue;
+        const schoolYearName = c.schoolYear?.name ?? null;
+        const yearId = schoolYearName ? (yearMap.get(normalizeKey(schoolYearName)) ?? null) : null;
+        const key = classKey(c.name, schoolYearName);
+        const existingId = classByKey.get(key);
+        if (existingId !== undefined) {
+          if (c.id !== undefined) payloadClassIdToNewId.set(c.id, existingId);
+          continue;
+        }
         const tuitionFeeCents = c.tuitionFeeCents ?? eurosToCents(c.tuitionFee ?? 0);
-        const created = await tx.class.create({ data: { name: c.name, tuitionFeeCents } });
-        classMap.set(key, created.id);
-        seenClasses.add(key);
+        const created = await tx.class.create({
+          data: { name: c.name, tuitionFeeCents, schoolYearId: yearId },
+        });
+        registerClass(created.id, c.name, yearId, schoolYearName);
+        if (c.id !== undefined) payloadClassIdToNewId.set(c.id, created.id);
         classesCreated++;
       }
 
@@ -446,7 +497,7 @@ router.post(
           studentId = existingId;
           studentsSkipped++;
         } else {
-          const classId = resolveClassId(st.class?.name);
+          const classId = resolveClassByName(st.class?.name);
           const familyId = st.family ? resolveFamilyId(st.family) : null;
           const created = await tx.student.create({
             data: { firstName: st.firstName, lastName: st.lastName, phone: st.phone ?? null, classId, familyId },
@@ -495,7 +546,7 @@ router.post(
 
         if (teacherId !== null) {
           for (const name of teacherNames) {
-            const classId = resolveClassId(name);
+            const classId = resolveClassByName(name);
             if (!classId) continue;
             await tx.teacherClass.upsert({
               where: { teacherId_classId: { teacherId, classId } },
@@ -539,9 +590,9 @@ router.post(
       for (const a of attendances) {
         const newStudentId = studentMap.get(a.studentId ?? -1) ?? studentMap.get(a.student?.id ?? -1);
         const newClassId = a.class?.name
-          ? classMap.get(normalizeKey(a.class.name)) ?? null
-          : a.classId
-            ? resolveClassId(classes.find((c) => c?.id === a.classId)?.name)
+          ? resolveClassByName(a.class.name)
+          : a.classId !== undefined
+            ? (payloadClassIdToNewId.get(a.classId) ?? null)
             : null;
         if (newStudentId === undefined || newClassId === null) {
           continue;
@@ -559,9 +610,9 @@ router.post(
       for (const e of enrollments) {
         const sid = studentMap.get(e.studentId ?? -1) ?? studentMap.get(e.student?.id ?? -1);
         const cid = e.class?.name
-          ? classMap.get(normalizeKey(e.class.name)) ?? null
-          : e.classId
-            ? resolveClassId(classes.find((c) => c?.id === e.classId)?.name)
+          ? resolveClassByNameYear(e.class.name, e.schoolYear?.name ?? null) ?? resolveClassByName(e.class.name)
+          : e.classId !== undefined
+            ? (payloadClassIdToNewId.get(e.classId) ?? null)
             : null;
         if (sid === undefined || cid === null) continue;
         const yid = e.schoolYear?.name ? (yearMap.get(normalizeKey(e.schoolYear.name)) ?? null) : null;
