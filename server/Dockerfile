@@ -12,6 +12,10 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
+COPY prisma ./prisma
+COPY prisma.config.ts ./prisma.config.ts
+# npm ci déclenche le postinstall `prisma generate` :
+# le schéma doit donc être présent AVANT l'installation.
 RUN npm ci
 
 COPY . .
@@ -25,6 +29,11 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=5000
+
+# Prisma détecte la version d'OpenSSL installée pour déduire sa libssl.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
