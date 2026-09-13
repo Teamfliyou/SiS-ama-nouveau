@@ -7,12 +7,35 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum UserRole {
+  ADMIN
+  STAFF
+  TEACHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  CHEQUE
+  MOBILE_MONEY
+  OTHER
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   password  String
-  role      String   @default("STAFF")
+  role      UserRole @default(STAFF)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Class {
@@ -23,6 +46,7 @@ model Class {
   attendances     Attendance[]
   teachers        Teacher[]
   createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 }
 
 model Student {
@@ -35,15 +59,26 @@ model Student {
   payments    Payment[]
   attendances Attendance[]
   createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([lastName, firstName])
+  @@index([classId])
 }
 
 model Payment {
-  id          Int      @id @default(autoincrement())
+  id          Int           @id @default(autoincrement())
   amountCents Int
-  date        DateTime @default(now())
+  date        DateTime      @default(now())
   studentId   Int
-  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  method      String?  @default("Espèces")
+  student     Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  method      PaymentMethod @default(CASH)
+  reference   String?
+  note        String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([studentId])
+  @@index([date])
 }
 
 model Teacher {
@@ -56,16 +91,22 @@ model Teacher {
   classId   Int?
   class     Class?   @relation(fields: [classId], references: [id])
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lastName, firstName])
 }
 
 model Attendance {
-  id        Int     @id @default(autoincrement())
-  date      String  // "YYYY-MM-DD"
+  id        Int              @id @default(autoincrement())
+  date      DateTime         @db.Date
   studentId Int
   classId   Int
-  status    String  @default("PRESENT") // PRESENT, ABSENT, LATE
-  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  status    AttendanceStatus @default(PRESENT)
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
   @@unique([date, studentId])
+  @@index([classId, date])
 }
