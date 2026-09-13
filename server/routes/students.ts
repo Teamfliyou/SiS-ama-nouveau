@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, studentCreateSchema, parseId } from '../lib/validate';
 import { centsToEuros } from '../lib/money';
+import { toLabelMethod } from '../lib/paymentMethods';
 
 const router = Router();
 
@@ -39,7 +40,7 @@ const mapStudent = (s: StudentRow) => {
       amountCents: p.amountCents,
       amount: centsToEuros(p.amountCents),
       date: p.date,
-      method: p.method,
+      method: toLabelMethod(p.method),
     })),
     // Exact integer-cents computations; euros are derived for display only.
     totalPaidCents,

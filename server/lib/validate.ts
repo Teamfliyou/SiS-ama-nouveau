@@ -17,7 +17,7 @@ export const passwordSchema = z
   .max(128, 'Le mot de passe est trop long')
   .refine((v) => v.trim().length > 0, { message: 'Le mot de passe ne peut pas être vide' });
 
-export const roleSchema = z.enum(['ADMIN', 'STAFF'], { message: 'Rôle invalide' });
+export const roleSchema = z.enum(['ADMIN', 'STAFF', 'TEACHER'], { message: 'Rôle invalide' });
 
 export const nameField = (field: string, max = 120) =>
   z
@@ -138,15 +138,19 @@ export const paymentCreateSchema = z.object({
   amount: euroAmount(0.01, 'Le montant'),
   studentId: z.number().int().positive('Élève invalide'),
   method: optionalTextField('La méthode', 50),
+  reference: optionalTextField('La référence', 120),
+  note: optionalTextField('La note', 500),
 });
 
 export const paymentUpdateSchema = z.object({
   amount: euroAmount(0.01, 'Le montant'),
   method: optionalTextField('La méthode', 50),
+  reference: optionalTextField('La référence', 120),
+  note: optionalTextField('La note', 500),
 });
 
-export const attendanceStatusSchema = z.enum(['PRESENT', 'ABSENT', 'LATE'], {
-  message: 'Statut invalide (PRESENT, ABSENT ou LATE uniquement)',
+export const attendanceStatusSchema = z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'], {
+  message: 'Statut invalide (PRESENT, ABSENT, LATE ou EXCUSED uniquement)',
 });
 
 /** True when `value` is a real calendar day in strict YYYY-MM-DD form (e.g. 2026-02-31 is rejected). */

@@ -6,6 +6,8 @@ import { asyncHandler } from '../lib/errors';
 import { validate, isRealDateString } from '../lib/validate';
 import { normalizeKey, studentKey } from '../lib/dedupe';
 import { eurosToCents } from '../lib/money';
+import { toEnumMethod, toLabelMethod } from '../lib/paymentMethods';
+import { ymdToDate, toYmd } from '../lib/dates';
 
 const router = Router();
 
@@ -52,7 +54,7 @@ const paymentDateSchema = z.string().max(40).optional().refine(
 const attendanceDateSchema = z
   .string()
   .max(40)
-  .refine((v) => isRealDateString(v), { message: 'Date invalide (attendu YYYY-MM-DD)' });
+  .refine((v) => isParsableDateString(v), { message: 'Date invalide (attendu YYYY-MM-DD)' });
 
 const importPayloadSchema = z.object({
   version: z.string().optional(),
@@ -104,6 +106,8 @@ const importPayloadSchema = z.object({
       z.object({
         studentId: z.number().int().optional(),
         method: optionalString.transform((v) => v || 'Espèces'),
+        reference: optionalString.transform((v) => v || null),
+        note: optionalString.transform((v) => v || null),
         amount: euroNumber,
         amountCents: centsNumber,
         date: paymentDateSchema,
@@ -118,7 +122,7 @@ const importPayloadSchema = z.object({
         date: attendanceDateSchema,
         studentId: z.number().int().optional(),
         classId: z.number().int().optional(),
-        status: z.enum(['PRESENT', 'ABSENT', 'LATE']).default('PRESENT'),
+        status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']).default('PRESENT'),
         student: z.object({ id: z.number().int() }).optional(),
         class: z.object({ name: z.string() }).optional(),
       })
@@ -150,8 +154,12 @@ router.get(
       classes,
       students,
       teachers,
-      payments,
-      attendances,
+      // La méthode stockée est une clé d'enum ; on exporte le label français
+      // historique pour rester compatible avec les sauvegardes v2 et le frontend.
+      payments: payments.map((p) => ({ ...p, method: toLabelMethod(p.method) })),
+      // Les présences exportées utilisent le jour calendaire (YYYY-MM-DD),
+      // exactement au format accepté par l'import.
+      attendances: attendances.map((a) => ({ ...a, date: toYmd(a.date) })),
     });
   })
 );
@@ -206,7 +214,7 @@ router.post(
       });
 
       const paymentKey = (studentId: number, amountCents: number, method: string | null, date: Date | string): string =>
-        `${studentId}|${amountCents}|${normalizeKey(method ?? 'Espèces')}|${
+        `${studentId}|${amountCents}|${normalizeKey(toLabelMethod(toEnumMethod(method)) ?? 'Espèces')}|${
           date instanceof Date ? date.getTime() : new Date(date).getTime()
         }`;
       const seenPayments = new Set(
@@ -294,7 +302,9 @@ router.post(
         await tx.payment.create({
           data: {
             amountCents,
-            method: p.method ?? 'Espèces',
+            method: toEnumMethod(p.method) ?? 'CASH',
+            reference: p.reference,
+            note: p.note,
             studentId: newStudentId,
             date,
           },
@@ -310,10 +320,11 @@ router.post(
             ? resolveClassId(classes.find((c) => c?.id === a.classId)?.name)
             : null;
         if (newStudentId === undefined || newClassId === null) continue;
+        const storedDate = ymdToDate(a.date.slice(0, 10));
         await tx.attendance.upsert({
-          where: { date_studentId: { date: a.date, studentId: newStudentId } },
+          where: { date_studentId: { date: storedDate, studentId: newStudentId } },
           update: { status: a.status },
-          create: { date: a.date, studentId: newStudentId, classId: newClassId, status: a.status },
+          create: { date: storedDate, studentId: newStudentId, classId: newClassId, status: a.status },
         });
         attendancesCreated++;
       }
