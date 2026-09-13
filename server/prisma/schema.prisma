@@ -73,7 +73,9 @@ model Student {
   lastName    String
   phone       String?
   classId     Int?
-  class       Class?       @relation(fields: [classId], references: [id])
+  class       Class?       @relation(fields: [classId], references: [id], onDelete: SetNull)
+  familyId    Int?
+  family      Family?      @relation(fields: [familyId], references: [id], onDelete: SetNull)
   payments    Payment[]
   attendances Attendance[]
   enrollments Enrollment[]
@@ -82,6 +84,7 @@ model Student {
 
   @@index([lastName, firstName])
   @@index([classId])
+  @@index([familyId])
 }
 
 model Payment {
@@ -160,4 +163,15 @@ model Enrollment {
   @@index([studentId])
   @@index([classId])
   @@index([isActive])
+}
+
+model Family {
+  id        Int       @id @default(autoincrement())
+  name      String?
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  students  Student[]
 }
