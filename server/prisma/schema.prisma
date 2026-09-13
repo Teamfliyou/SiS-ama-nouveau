@@ -29,6 +29,18 @@ enum PaymentMethod {
   OTHER
 }
 
+model SchoolYear {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  startDate   DateTime     @db.Date
+  endDate     DateTime     @db.Date
+  active      Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  classes     Class[]
+  enrollments Enrollment[]
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
@@ -39,14 +51,19 @@ model User {
 }
 
 model Class {
-  id              Int          @id @default(autoincrement())
-  name            String       @unique
-  tuitionFeeCents Int          @default(0)
-  students        Student[]
-  attendances     Attendance[]
-  teachers        Teacher[]
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id               Int          @id @default(autoincrement())
+  name             String       @unique
+  tuitionFeeCents  Int          @default(0)
+  schoolYearId     Int?
+  schoolYear       SchoolYear?  @relation(fields: [schoolYearId], references: [id], onDelete: SetNull)
+  students         Student[]
+  attendances      Attendance[]
+  teachers         Teacher[]
+  enrollments      Enrollment[]
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([schoolYearId])
 }
 
 model Student {
@@ -58,6 +75,7 @@ model Student {
   class       Class?       @relation(fields: [classId], references: [id])
   payments    Payment[]
   attendances Attendance[]
+  enrollments Enrollment[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -109,4 +127,24 @@ model Attendance {
 
   @@unique([date, studentId])
   @@index([classId, date])
+}
+
+model Enrollment {
+  id           Int         @id @default(autoincrement())
+  studentId    Int
+  classId      Int
+  schoolYearId Int?
+  isActive     Boolean     @default(true)
+  startDate    DateTime?   @db.Date
+  endDate      DateTime?   @db.Date
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  student      Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class        Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  schoolYear   SchoolYear? @relation(fields: [schoolYearId], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, classId, schoolYearId])
+  @@index([studentId])
+  @@index([classId])
+  @@index([isActive])
 }
