@@ -17,6 +17,7 @@ import statsRoutes from '../routes/stats';
 import setupRoutes from '../routes/setup';
 import schoolYearRoutes from '../routes/schoolYears';
 import familyRoutes from '../routes/families';
+import healthRoutes from '../routes/health';
 import { getJwtSecret } from './secret';
 
 /** Fails fast on a missing/weak JWT secret. Never rely on a default value. */
@@ -60,6 +61,7 @@ export function createApp(): Express {
 
   // ─── API routes ───────────────────────────────────────────────────
   // Public bootstrap must be mounted early.
+  app.use('/api/health', healthRoutes);
   app.use('/api/setup', setupRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
