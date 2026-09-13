@@ -5,6 +5,17 @@
     <link rel="icon" type="image/png" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ASSO AMA SIS</title>
+    <script>
+      // Anti-FOUC : applique le thème mémorisé avant le premier rendu.
+      (function () {
+        try {
+          var t = localStorage.getItem('sis-ui-theme');
+          document.documentElement.dataset.theme = t === 'liquid' ? 'liquid' : 'classic';
+        } catch (e) {
+          document.documentElement.dataset.theme = 'classic';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

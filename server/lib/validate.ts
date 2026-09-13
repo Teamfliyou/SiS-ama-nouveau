@@ -17,7 +17,7 @@ export const passwordSchema = z
   .max(128, 'Le mot de passe est trop long')
   .refine((v) => v.trim().length > 0, { message: 'Le mot de passe ne peut pas être vide' });
 
-export const roleSchema = z.enum(['ADMIN', 'STAFF'], { message: 'Rôle invalide' });
+export const roleSchema = z.enum(['ADMIN', 'STAFF', 'TEACHER'], { message: 'Rôle invalide' });
 
 export const nameField = (field: string, max = 120) =>
   z
@@ -108,17 +108,23 @@ export const roleUpdateSchema = z.object({
 export const classCreateSchema = z.object({
   name: nameField('Le nom de la classe', 120),
   tuitionFee: euroAmount(0, 'Les frais de scolarité').optional(),
+  schoolYearId: z.number().int().positive('Année scolaire invalide').nullable().optional(),
 });
+
+/** Optional positive integer id shared by several schemas (blank -> null). */
+const optionalIdField = (label: string) =>
+  z
+    .union([z.number().int().positive(label), z.null(), z.literal('')])
+    .nullable()
+    .optional()
+    .transform((v) => (v === '' || v === null || v === undefined ? null : (v as number)));
 
 export const studentCreateSchema = z.object({
   firstName: nameField('Le prénom'),
   lastName: nameField('Le nom'),
   phone: optionalPhoneSchema,
-  classId: z
-    .union([z.number().int().positive('La classe doit être un entier positif'), z.null(), z.literal('')])
-    .nullable()
-    .optional()
-    .transform((v) => (v === '' || v === null || v === undefined ? null : v as number)),
+  classId: optionalIdField('La classe doit être un entier positif'),
+  familyId: optionalIdField('La famille doit être un entier positif'),
 });
 
 export const teacherCreateSchema = z.object({
@@ -127,26 +133,36 @@ export const teacherCreateSchema = z.object({
   subject: optionalTextField('La matière'),
   email: optionalEmailSchema,
   phone: optionalPhoneSchema,
-  classId: z
-    .union([z.number().int().positive('La classe doit être un entier positif'), z.null(), z.literal('')])
-    .nullable()
-    .optional()
-    .transform((v) => (v === '' || v === null || v === undefined ? null : v as number)),
+  classId: optionalIdField('La classe doit être un entier positif'),
+  classIds: z.array(z.number().int().positive('Classe invalide')).max(50).optional(),
 });
+
+export const familyCreateSchema = z.object({
+  name: optionalTextField('Le nom de la famille', 120),
+  phone: optionalPhoneSchema,
+  email: optionalEmailSchema,
+  address: optionalTextField("L'adresse", 255),
+});
+
+export const familyUpdateSchema = familyCreateSchema;
 
 export const paymentCreateSchema = z.object({
   amount: euroAmount(0.01, 'Le montant'),
   studentId: z.number().int().positive('Élève invalide'),
   method: optionalTextField('La méthode', 50),
+  reference: optionalTextField('La référence', 120),
+  note: optionalTextField('La note', 500),
 });
 
 export const paymentUpdateSchema = z.object({
   amount: euroAmount(0.01, 'Le montant'),
   method: optionalTextField('La méthode', 50),
+  reference: optionalTextField('La référence', 120),
+  note: optionalTextField('La note', 500),
 });
 
-export const attendanceStatusSchema = z.enum(['PRESENT', 'ABSENT', 'LATE'], {
-  message: 'Statut invalide (PRESENT, ABSENT ou LATE uniquement)',
+export const attendanceStatusSchema = z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'], {
+  message: 'Statut invalide (PRESENT, ABSENT, LATE ou EXCUSED uniquement)',
 });
 
 /** True when `value` is a real calendar day in strict YYYY-MM-DD form (e.g. 2026-02-31 is rejected). */
@@ -165,6 +181,20 @@ export const dateStringSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'La date doit être au format YYYY-MM-DD')
   .refine(isRealDateString, { message: 'Date inexistante' });
+
+export const schoolYearCreateSchema = z.object({
+  name: nameField("Le nom de l'année", 120),
+  startDate: dateStringSchema,
+  endDate: dateStringSchema,
+  active: z.boolean().optional().default(false),
+});
+
+export const schoolYearUpdateSchema = z.object({
+  name: nameField("Le nom de l'année", 120).optional(),
+  startDate: dateStringSchema.optional(),
+  endDate: dateStringSchema.optional(),
+  active: z.boolean().optional(),
+});
 
 export const attendanceCreateSchema = z.object({
   date: dateStringSchema,
