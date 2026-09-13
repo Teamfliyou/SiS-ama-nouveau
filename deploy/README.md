@@ -13,9 +13,17 @@ Le script est **rejouable** : relancez la même commande pour mettre à jour le
 code, reconstruire les images, appliquer les migrations Prisma et relancer les
 conteneurs — **sans jamais toucher aux données**.
 
-> Branche déployée : `feature/postgresql-migration` (la plus complète en
-> matière de migration PostgreSQL). Elle bascule automatiquement sur `main` si
-> elle n'existe plus.
+> Branche déployée : `feat/deploy-docker` (elle contient `install.sh`,
+> `docker-compose.yml`, `frontend/` et `server/`). Elle bascule
+> automatiquement sur `main` si elle n'existe plus.
+>
+> **Tant que cette branche n'est pas mergée dans `main`**, utilisez la commande
+> temporaire ci-dessous (la branche est inscrite dans `BRANCH=` dans le script,
+> donc pas besoin de `sed` ni d'édition manuelle) :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Teamfliyou/SiS-ama-nouveau/feat/deploy-docker/deploy/install.sh | sudo bash
+```
 
 ## Architecture déployée
 

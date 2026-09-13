@@ -17,8 +17,8 @@ set -euo pipefail
 APP_NAME="SiS AMA"
 APP_DIR="/opt/sis-ama"
 REPO_URL="https://github.com/Teamfliyou/SiS-ama-nouveau"
-# Branche contenant la migration PostgreSQL la plus complète.
-BRANCH="feature/postgresql-migration"
+# Branche contenant le déploiement Docker Compose (install.sh + docker-compose.yml).
+BRANCH="feat/deploy-docker"
 DB_NAME="sisama"
 DB_USER="sisama"
 ENV_FILE="${APP_DIR}/.env"
