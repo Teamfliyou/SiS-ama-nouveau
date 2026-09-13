@@ -25,9 +25,11 @@
 |---|---|
 | Authentification | `POST /api/auth/login`, `PUT /api/auth/password` |
 | Administration | `GET/POST /api/users`, `PUT /api/users/:id/role`, `DELETE /api/users/:id` |
-| Élèves | `GET/POST /api/students`, `PUT/DELETE /api/students/:id` |
+| Élèves | `GET/POST /api/students`, `GET/PUT/DELETE /api/students/:id` |
 | Professeurs | `GET/POST /api/teachers`, `PUT/DELETE /api/teachers/:id` |
 | Classes | `GET/POST /api/classes`, `PUT/DELETE /api/classes/:id` |
+| Années scolaires | `GET/POST /api/school-years`, `PUT/DELETE /api/school-years/:id` |
+| Familles | `GET/POST /api/families`, `PUT/DELETE /api/families/:id` |
 | Présences | `GET/POST /api/attendance`, `GET /api/attendance/history` |
 | Finances | `GET/POST /api/finances`, `PUT/DELETE /api/finances/:id` |
 | Import CSV | `POST /api/import-csv/students`, `POST /api/import-csv/teachers` |
@@ -35,6 +37,13 @@
 | Statistiques | `GET /api/stats` |
 
 Toutes les routes (hors login et bootstrap initial) nécessitent un token JWT via l'en-tête `Authorization: Bearer <token>`.
+
+> 📁 Données : un élève garde un **historique d'inscriptions** (classes suivies,
+> automatique à chaque changement de classe), un professeur peut être affecté à
+> **plusieurs classes**, les paiements utilisent des méthodes typées (`Espèces`,
+> `Carte bancaire`, `Virement`, `Chèque`, `Mobile Money`, `Autre`) et les présences
+> sont stockées comme de vraies dates. Les exports JSON sont versionnés
+> (`version: "3"`) et l'import accepte aussi les sauvegardes v2.
 
 ## 🚀 Démarrage Rapide (PostgreSQL)
 
