@@ -15,6 +15,9 @@ import importCsvRoutes from '../routes/importCsv';
 import dataRoutes from '../routes/data';
 import statsRoutes from '../routes/stats';
 import setupRoutes from '../routes/setup';
+import schoolYearRoutes from '../routes/schoolYears';
+import familyRoutes from '../routes/families';
+import healthRoutes from '../routes/health';
 import { getJwtSecret } from './secret';
 
 /** Fails fast on a missing/weak JWT secret. Never rely on a default value. */
@@ -58,6 +61,7 @@ export function createApp(): Express {
 
   // ─── API routes ───────────────────────────────────────────────────
   // Public bootstrap must be mounted early.
+  app.use('/api/health', healthRoutes);
   app.use('/api/setup', setupRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
@@ -69,6 +73,8 @@ export function createApp(): Express {
   app.use('/api/import-csv', importCsvRoutes);
   app.use('/api', dataRoutes); // /api/export, /api/import/full
   app.use('/api/stats', statsRoutes);
+  app.use('/api/school-years', schoolYearRoutes);
+  app.use('/api/families', familyRoutes);
 
   // Unknown API routes return JSON, not HTML error pages.
   app.use('/api', (_req: Request, res: Response) => {
