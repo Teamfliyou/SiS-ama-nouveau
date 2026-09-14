@@ -3,10 +3,13 @@ import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, attendanceCreateSchema, parseId, isRealDateString } from '../lib/validate';
+import { ymdToDate, toYmd } from '../lib/dates';
 
 const router = Router();
 
 router.use(authenticate);
+
+const mapRecord = (r: { date: Date } & Record<string, unknown>) => ({ ...r, date: toYmd(r.date as Date | string) });
 
 // GET /api/attendance?classId=&date=
 router.get(
@@ -16,8 +19,11 @@ router.get(
     if (!classId || !date) throw new AppError(400, 'classId et date requis');
     if (!isRealDateString(date)) throw new AppError(400, 'Date invalide (format YYYY-MM-DD)');
     const cid = parseId(classId, 'Identifiant de classe invalide');
-    const records = await prisma.attendance.findMany({ where: { classId: cid, date } });
-    res.json(records);
+    const records = await prisma.attendance.findMany({
+      where: { classId: cid, date: ymdToDate(date) },
+      orderBy: { studentId: 'asc' },
+    });
+    res.json(records.map(mapRecord));
   })
 );
 
@@ -35,7 +41,7 @@ router.get(
       orderBy: { date: 'desc' },
       take: 30,
     });
-    res.json(history);
+    res.json(history.map((h) => ({ date: toYmd(h.date), count: h._count.status })));
   })
 );
 
@@ -49,8 +55,9 @@ router.post(
   asyncHandler(async (req, res) => {
     const { date, records } = req.body as {
       date: string;
-      records: { studentId: number; classId?: number | null; status: 'PRESENT' | 'ABSENT' | 'LATE' }[];
+      records: { studentId: number; classId?: number | null; status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED' }[];
     };
+    const storedDate = ymdToDate(date);
 
     const result = await prisma.$transaction(async (tx) => {
       let saved = 0;
@@ -61,9 +68,9 @@ router.post(
           throw new AppError(400, `L'élève ${r.studentId} n'a pas de classe, appel impossible`);
         }
         await tx.attendance.upsert({
-          where: { date_studentId: { date, studentId: r.studentId } },
+          where: { date_studentId: { date: storedDate, studentId: r.studentId } },
           update: { status: r.status, classId: student.classId },
-          create: { date, studentId: r.studentId, classId: student.classId, status: r.status },
+          create: { date: storedDate, studentId: r.studentId, classId: student.classId, status: r.status },
         });
         saved++;
       }
