@@ -14,7 +14,7 @@ type Props = {
 
 /**
  * Navigation latérale Liquid Glass : fine, flottante, arrondie et translucide.
- * Sur mobile elle devient un tiroir ; sur ordinateur elle peut être repliée.
+ * Sur mobile elle reste toujours en largeur complète ; sur ordinateur elle peut être repliée.
  */
 export default function LiquidSidebar({
   groups,
@@ -32,45 +32,44 @@ export default function LiquidSidebar({
       )}
 
       <aside
-        className={`lg-sidebar fixed inset-y-3 left-3 z-50 flex flex-col p-3 transition-[width,transform] duration-300 lg:sticky lg:top-3 lg:inset-y-auto lg:h-[calc(100vh-1.5rem)] lg:translate-x-0 ${
-          collapsed ? 'w-[84px]' : 'w-[268px]'
-        } ${mobileOpen ? 'translate-x-0' : '-translate-x-[110%]'}`}
+        className={`lg-sidebar fixed inset-y-3 left-3 z-50 flex w-[268px] shrink-0 flex-col p-3 transition-[width,transform] duration-300 lg:sticky lg:top-3 lg:inset-y-auto lg:h-[calc(100vh-1.5rem)] lg:translate-x-0 ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-[110%]'
+        }`}
+        data-collapsed={collapsed ? 'true' : 'false'}
         aria-label="Navigation principale"
       >
-        <div className={`flex items-center gap-3 px-2 h-14 ${collapsed ? 'justify-center' : 'justify-between'}`}>
-          {!collapsed && (
-            <div className="flex items-center gap-2.5 min-w-0">
-              <img src="/logo.png" alt="" className="h-9 w-9 object-contain" />
-              <div className="min-w-0">
-                <p className="text-sm font-extrabold text-slate-900 leading-tight truncate">SiS AMA</p>
-                <p className="text-[11px] text-slate-400 leading-tight">Portail scolaire</p>
-              </div>
+        <div className="lg-sidebar-head flex h-14 shrink-0 items-center gap-3 px-2">
+          <div className="lg-sidebar-brand flex min-w-0 flex-1 items-center gap-2.5">
+            <img src="/logo.png" alt="SiS AMA" className="h-9 w-9 shrink-0 object-contain" />
+            <div className="lg-sidebar-brand-text min-w-0">
+              <p className="truncate text-sm font-extrabold leading-tight text-slate-900">SiS AMA</p>
+              <p className="truncate text-[11px] leading-tight text-slate-400">Portail scolaire</p>
             </div>
-          )}
-          {collapsed && <img src="/logo.png" alt="SiS AMA" className="h-9 w-9 object-contain" />}
+          </div>
+
           <button
             type="button"
             onClick={onCloseMobile}
             aria-label="Fermer le menu"
-            className="lg-icon-btn lg:hidden"
+            className="lg-icon-btn shrink-0 lg:hidden"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </button>
+
           <button
             type="button"
             onClick={onToggleCollapse}
             aria-label={collapsed ? 'Déployer le menu' : 'Replier le menu'}
-            className="lg-icon-btn hidden lg:inline-flex"
+            className="lg-icon-btn lg-sidebar-toggle hidden shrink-0 lg:inline-flex"
           >
-            {collapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+            {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto mt-2 space-y-0.5 pr-0.5" aria-label="Sections">
+        <nav className="lg-sidebar-nav mt-2 flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden pr-0.5" aria-label="Sections">
           {groups.map((group) => (
-            <div key={group.label}>
-              {!collapsed && <p className="lg-nav-group-label">{group.label}</p>}
-              {collapsed && <div className="h-3" />}
+            <div key={group.label} className="lg-sidebar-group">
+              <p className="lg-nav-group-label">{group.label}</p>
               {group.items.map((item) => {
                 const active = pathname === item.href;
                 return (
@@ -81,10 +80,10 @@ export default function LiquidSidebar({
                     onClick={onCloseMobile}
                     title={collapsed ? item.name : undefined}
                     aria-current={active ? 'page' : undefined}
-                    className={`lg-nav-link ${collapsed ? 'justify-center px-0' : ''}`}
+                    className="lg-nav-link"
                   >
-                    <item.icon className="w-5 h-5 shrink-0" aria-hidden="true" />
-                    {!collapsed && <span className="truncate">{item.name}</span>}
+                    <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                    <span className="lg-sidebar-link-label truncate">{item.name}</span>
                   </Link>
                 );
               })}
@@ -95,10 +94,10 @@ export default function LiquidSidebar({
         <button
           type="button"
           onClick={onLogout}
-          className={`lg-nav-link mt-2 text-red-500 hover:text-red-600 ${collapsed ? 'justify-center px-0' : ''}`}
+          className="lg-nav-link lg-sidebar-logout mt-2 w-full shrink-0 text-red-500 hover:text-red-600"
         >
-          <LogOut className="w-5 h-5 shrink-0" aria-hidden="true" />
-          {!collapsed && <span>Déconnexion</span>}
+          <LogOut className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span className="lg-sidebar-link-label">Déconnexion</span>
         </button>
       </aside>
     </>
