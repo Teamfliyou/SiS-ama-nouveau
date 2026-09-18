@@ -8,7 +8,7 @@ type Step = 'upload' | 'mapping' | 'preview' | 'done';
 type ColumnMap = { firstName: string; lastName: string; className: string; tuitionFee: string; phone: string };
 type ImportResult = { createdStudents: number; createdClasses: number; skipped?: number; errors?: { row: number; reason: string }[] };
 
-export default function CsvImport() {
+export default function CsvImport({ embedded = false }: { embedded?: boolean } = {}) {
   const [step, setStep] = useState<Step>('upload');
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
@@ -128,10 +128,12 @@ export default function CsvImport() {
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
-      <div>
-        <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Import CSV</h2>
-        <p className="mt-2 text-sm text-slate-500">Importez des élèves et leurs classes depuis un fichier CSV.</p>
-      </div>
+      {!embedded && (
+        <div>
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Import CSV</h2>
+          <p className="mt-2 text-sm text-slate-500">Importez des élèves et leurs classes depuis un fichier CSV.</p>
+        </div>
+      )}
 
       {/* Stepper */}
       <div className="flex items-center gap-0">
