@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { authenticate, requireAdmin } from '../middleware/auth';
@@ -10,6 +10,11 @@ import { getActiveSchoolYearId, setActiveSchoolYear } from '../lib/schoolYears';
 import { eurosToCents } from '../lib/money';
 import { toEnumMethod, toLabelMethod } from '../lib/paymentMethods';
 import { ymdToDate, toYmd } from '../lib/dates';
+import {
+  CURRENT_BACKUP_FORMAT_VERSION,
+  normalizeBackupInput,
+  buildBackupFilename,
+} from '../lib/backup';
 
 const router = Router();
 
@@ -221,6 +226,24 @@ const importPayloadSchema = z.object({
     .optional(),
 });
 
+/**
+ * Ramène toute sauvegarde (v1/v2/v3, avec ou sans enveloppe `data`) au format
+ * interne courant avant validation. Barrière de sécurité : seules les
+ * collections métier connues sont conservées.
+ */
+const normalizeBackup: RequestHandler = (req, _res, next) => {
+  req.body = normalizeBackupInput(req.body).payload;
+  next();
+};
+
+/** Corps attendu par la réinitialisation complète des données métier. */
+const RESET_CONFIRMATION = 'SUPPRIMER TOUTES LES DONNÉES';
+const resetSchema = z.object({
+  confirmation: z.string().refine((v) => v === RESET_CONFIRMATION, {
+    message: 'Confirmation invalide',
+  }),
+});
+
 // GET /api/export — full JSON backup. Never includes passwords, tokens or secrets.
 router.get(
   '/export',
@@ -251,13 +274,7 @@ router.get(
         }),
       ]);
 
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="asso-ama-export-${new Date().toISOString().slice(0, 10)}.json"`
-    );
-    res.json({
-      exportDate: new Date().toISOString(),
-      version: '3',
+    const data = {
       classes: classes.map((c) => ({
         ...c,
         schoolYear: c.schoolYear ? { id: c.schoolYear.id, name: c.schoolYear.name } : null,
@@ -297,6 +314,18 @@ router.get(
         startDate: e.startDate ? toYmd(e.startDate) : null,
         endDate: e.endDate ? toYmd(e.endDate) : null,
       })),
+    };
+
+    const now = new Date();
+    res.setHeader('Content-Disposition', `attachment; filename="${buildBackupFilename(now)}"`);
+    res.json({
+      // Format canonique v3 : métadonnées + enveloppe `data`.
+      application: 'SiS AMA',
+      backupFormatVersion: CURRENT_BACKUP_FORMAT_VERSION,
+      createdAt: now.toISOString(),
+      // Champ conservé pour les lecteurs/anciens scripts qui lisent `version`.
+      version: String(CURRENT_BACKUP_FORMAT_VERSION),
+      data,
     });
   })
 );
@@ -310,6 +339,7 @@ router.post(
   '/import/full',
   authenticate,
   requireAdmin,
+  normalizeBackup,
   validate(importPayloadSchema),
   asyncHandler(async (req, res) => {
     const payload = req.body as z.infer<typeof importPayloadSchema>;
@@ -324,7 +354,25 @@ router.post(
       enrollments = [],
     } = payload;
 
+    // `?mode=replace` : supprime d'abord les données métier (jamais les comptes
+    // utilisateurs) dans la MÊME transaction, puis restaure la sauvegarde.
+    // `?mode=merge` (défaut) : comportement d'import historique, sans doublon.
+    const replaceAll = req.query.mode === 'replace';
+
     const counts = await prisma.$transaction(async (tx) => {
+      if (replaceAll) {
+        // Ordre FK-safe : enfants avant parents. Les comptes User sont conservés.
+        await tx.attendance.deleteMany();
+        await tx.payment.deleteMany();
+        await tx.enrollment.deleteMany();
+        await tx.teacherClass.deleteMany();
+        await tx.student.deleteMany();
+        await tx.teacher.deleteMany();
+        await tx.class.deleteMany();
+        await tx.family.deleteMany();
+        await tx.schoolYear.deleteMany();
+      }
+
       let classesCreated = 0;
       let schoolYearsCreated = 0;
       let familiesCreated = 0;
@@ -665,6 +713,43 @@ router.post(
     });
 
     res.json(counts);
+  })
+);
+
+// DELETE /api/data/reset — efface TOUTES les données métier.
+// Réservé aux ADMIN, exige une confirmation explicite dans le corps de la
+// requête (jamais via un simple GET) et conserve les comptes utilisateurs.
+router.delete(
+  '/data/reset',
+  authenticate,
+  requireAdmin,
+  validate(resetSchema),
+  asyncHandler(async (_req, res) => {
+    const deleted = await prisma.$transaction(async (tx) => {
+      // Ordre FK-safe : enfants avant parents. `user` n'est jamais touché.
+      const attendance = await tx.attendance.deleteMany();
+      const payment = await tx.payment.deleteMany();
+      const enrollment = await tx.enrollment.deleteMany();
+      const teacherClass = await tx.teacherClass.deleteMany();
+      const student = await tx.student.deleteMany();
+      const teacher = await tx.teacher.deleteMany();
+      const classes = await tx.class.deleteMany();
+      const family = await tx.family.deleteMany();
+      const schoolYear = await tx.schoolYear.deleteMany();
+      return {
+        attendances: attendance.count,
+        payments: payment.count,
+        enrollments: enrollment.count,
+        teacherClasses: teacherClass.count,
+        students: student.count,
+        teachers: teacher.count,
+        classes: classes.count,
+        families: family.count,
+        schoolYears: schoolYear.count,
+      };
+    });
+
+    res.json({ success: true, usersPreserved: true, deleted });
   })
 );
 
