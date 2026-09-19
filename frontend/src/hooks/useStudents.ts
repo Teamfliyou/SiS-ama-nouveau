@@ -48,10 +48,10 @@ export type StudentInput = {
   firstName: string;
   lastName: string;
   phone: string | null;
-  dateOfBirth: string | null;
-  wasEnrolled2025_2026: boolean | null;
-  arabicCourse: string | null;
-  quranCourse: string | null;
+  dateOfBirth?: string | null;
+  wasEnrolled2025_2026?: boolean | null;
+  arabicCourse?: string | null;
+  quranCourse?: string | null;
   classId: number | null;
   familyId?: number | null;
   parent?: StudentParentInput;
