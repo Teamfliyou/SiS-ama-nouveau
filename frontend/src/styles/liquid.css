@@ -773,3 +773,156 @@
   }
 }
 
+
+
+/* ── Fiche élève Liquid Glass ───────────────────────────────────── */
+[data-theme='liquid'] .lg-student-profile-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 26px;
+  padding: 1.25rem;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.92), rgba(239,246,255,0.72)),
+    radial-gradient(circle at 88% 18%, rgba(79,156,249,0.22), transparent 34%);
+  border: 1px solid rgba(255,255,255,0.92);
+  box-shadow: 0 18px 45px rgba(15,23,42,0.11);
+}
+
+[data-theme='liquid'] .lg-student-profile-hero::after {
+  content: '';
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  right: -70px;
+  top: -75px;
+  border-radius: 999px;
+  background: rgba(26,115,232,0.16);
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+[data-theme='liquid'] .lg-student-profile-glow {
+  position: absolute;
+  inset: auto auto -90px -75px;
+  width: 210px;
+  height: 210px;
+  border-radius: 999px;
+  background: rgba(99,102,241,0.11);
+  filter: blur(18px);
+  pointer-events: none;
+}
+
+[data-theme='liquid'] .lg-student-profile-avatar {
+  width: 4.5rem;
+  height: 4.5rem;
+  font-size: 1.15rem;
+  border: 4px solid rgba(255,255,255,0.75);
+  box-shadow: 0 14px 30px rgba(26,115,232,0.26);
+}
+
+[data-theme='liquid'] .lg-student-profile-age {
+  min-width: 145px;
+  padding: 0.8rem 1rem;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid rgba(255,255,255,0.9);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 8px 22px rgba(15,23,42,0.08);
+  backdrop-filter: blur(16px);
+}
+
+[data-theme='liquid'] .lg-student-profile-age strong {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 1.2rem;
+  color: var(--lg-ink);
+}
+
+[data-theme='liquid'] .lg-student-profile-card,
+[data-theme='liquid'] .lg-student-form-section {
+  border-radius: 22px;
+  padding: 1rem;
+  background: rgba(255,255,255,0.62);
+  border: 1px solid rgba(255,255,255,0.88);
+  box-shadow: 0 10px 28px rgba(15,23,42,0.07);
+  backdrop-filter: blur(18px) saturate(150%);
+}
+
+[data-theme='liquid'] .lg-student-profile-card {
+  transition: transform 0.2s var(--lg-ease), box-shadow 0.2s var(--lg-ease), background-color 0.2s var(--lg-ease);
+}
+
+[data-theme='liquid'] .lg-student-profile-card:hover {
+  transform: translateY(-2px);
+  background: rgba(255,255,255,0.76);
+  box-shadow: 0 16px 34px rgba(15,23,42,0.1);
+}
+
+[data-theme='liquid'] .lg-student-profile-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+[data-theme='liquid'] .lg-student-profile-lines {
+  display: grid;
+  gap: 0.15rem;
+}
+
+[data-theme='liquid'] .lg-student-profile-lines > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 0.8rem;
+  padding: 0.62rem 0;
+  border-bottom: 1px solid rgba(148,163,184,0.16);
+}
+
+[data-theme='liquid'] .lg-student-profile-lines > div:last-child {
+  border-bottom: 0;
+}
+
+[data-theme='liquid'] .lg-student-profile-lines span {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+[data-theme='liquid'] .lg-student-profile-lines strong {
+  color: #1e293b;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+@media (max-width: 639px) {
+  [data-theme='liquid'] .lg-student-profile-age {
+    width: 100%;
+  }
+
+  [data-theme='liquid'] .lg-student-profile-lines > div {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  [data-theme='liquid'] .lg-student-profile-lines strong {
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme='liquid'] .lg-student-profile-card {
+    transition: none !important;
+  }
+
+  [data-theme='liquid'] .lg-student-profile-card:hover {
+    transform: none;
+  }
+}
