@@ -257,6 +257,150 @@ describe('CSV import', () => {
     expect(res.body.errors.every((e: { row: number }) => e.row >= 2)).toBe(true);
   });
 
+  it('imports the complete AMA student profile and groups siblings into one family', async () => {
+    const token = await adminToken();
+    const res = await req
+      .post('/api/import-csv/students')
+      .set(auth(token))
+      .send({
+        rows: [
+          {
+            firstName: 'Amir',
+            lastName: 'Famille',
+            className: 'Classe 1-A',
+            tuitionFee: 180,
+            phone: '06 11 22 33 44',
+            familyRef: 'FAM001',
+            familySize: 2,
+            parentEmail: 'parent@example.com',
+            wasEnrolled2025_2026: true,
+            arabicCourse: 'Classe 1-A',
+            quranCourse: 'Niveau 1',
+            dateOfBirth: '2019-06-11',
+            ageInOctober2026: 7,
+            parentName: 'Parent Famille',
+          },
+          {
+            firstName: 'Ines',
+            lastName: 'Famille',
+            className: 'Classe 2',
+            tuitionFee: 180,
+            phone: '06 11 22 33 44',
+            familyRef: 'FAM001',
+            familySize: 2,
+            parentEmail: 'parent@example.com',
+            wasEnrolled2025_2026: false,
+            arabicCourse: 'Classe 2',
+            quranCourse: null,
+            dateOfBirth: '2017-03-02',
+            ageInOctober2026: 9,
+            parentName: 'Parent Famille',
+          },
+        ],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      createdStudents: 2,
+      createdFamilies: 1,
+      linkedFamilies: 1,
+      createdClasses: 2,
+      skipped: 0,
+    });
+
+    const students = (await req.get('/api/students').set(auth(token))).body;
+    expect(students).toHaveLength(2);
+    expect(students[0].familyId).toBe(students[1].familyId);
+
+    const amir = students.find((s: { firstName: string }) => s.firstName === 'Amir');
+    expect(amir.dateOfBirth).toBe('2019-06-11');
+    expect(amir.wasEnrolled2025_2026).toBe(true);
+    expect(amir.arabicCourse).toBe('Classe 1-A');
+    expect(amir.quranCourse).toBe('Niveau 1');
+    expect(amir.family).toMatchObject({
+      name: 'Parent Famille',
+      phone: '06 11 22 33 44',
+      email: 'parent@example.com',
+    });
+
+    const families = (await req.get('/api/families').set(auth(token))).body;
+    expect(families).toHaveLength(1);
+    expect(families[0]._count.students).toBe(2);
+  });
+
+  it('keeps two PDF rows when the same name appears in two different classes', async () => {
+    const token = await adminToken();
+    const res = await req
+      .post('/api/import-csv/students')
+      .set(auth(token))
+      .send({
+        rows: [
+          { firstName: 'Sofiane', lastName: 'Lmsala', className: 'Classe 2', familyRef: 'FAM001', parentName: 'Parent Lmsala' },
+          { firstName: 'Sofiane', lastName: 'Lmsala', className: 'Classe 3', familyRef: 'FAM001', parentName: 'Parent Lmsala' },
+        ],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.createdStudents).toBe(2);
+    expect(res.body.skipped).toBe(0);
+
+    const students = (await req.get('/api/students').set(auth(token))).body;
+    const sofianes = students.filter((s: { firstName: string; lastName: string }) => s.firstName === 'Sofiane' && s.lastName === 'Lmsala');
+    expect(sofianes).toHaveLength(2);
+    expect(new Set(sofianes.map((s: { classId: number }) => s.classId)).size).toBe(2);
+    expect(sofianes[0].familyId).toBe(sofianes[1].familyId);
+  });
+
+  it('updates an existing same-student same-class row when the enriched CSV is imported again', async () => {
+    const token = await adminToken();
+    const first = await req
+      .post('/api/import-csv/students')
+      .set(auth(token))
+      .send({
+        rows: [
+          {
+            firstName: 'Léa',
+            lastName: 'Martin',
+            className: 'Classe 4',
+            phone: '0600000000',
+            familyRef: 'FAM010',
+            parentName: 'Parent Martin',
+            parentEmail: 'martin@example.com',
+            quranCourse: 'Débutant',
+          },
+        ],
+      });
+    expect(first.status).toBe(200);
+    expect(first.body.createdStudents).toBe(1);
+
+    const second = await req
+      .post('/api/import-csv/students')
+      .set(auth(token))
+      .send({
+        rows: [
+          {
+            firstName: 'Léa',
+            lastName: 'Martin',
+            className: 'Classe 4',
+            phone: '0611111111',
+            familyRef: 'FAM010',
+            parentName: 'Parent Martin',
+            parentEmail: 'martin@example.com',
+            quranCourse: 'Intermédiaire',
+          },
+        ],
+      });
+
+    expect(second.status).toBe(200);
+    expect(second.body.createdStudents).toBe(0);
+    expect(second.body.updatedStudents).toBe(1);
+
+    const students = (await req.get('/api/students').set(auth(token))).body;
+    expect(students).toHaveLength(1);
+    expect(students[0].quranCourse).toBe('Intermédiaire');
+    expect(students[0].family.phone).toBe('0611111111');
+  });
+
   it('rejects an empty import with 400', async () => {
     const token = await adminToken();
     expect((await req.post('/api/import-csv/students').set(auth(token)).send({ rows: [] })).status).toBe(400);
