@@ -118,7 +118,7 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
         dateOfBirth: findColumn(parsed[0], ['Date de naissance', 'Date naissance', 'Naissance']),
         ageInOctober2026: findColumn(parsed[0], ['Age en Octobre 2026', 'Âge en Octobre 2026']),
         parentName: findColumn(parsed[0], ['NOM & Prénom', 'Nom & Prénom', 'Nom parent', 'Parent']),
-        parentAddress: findColumn(parsed[0], ['Adresse parent', 'Adresse']),
+        parentAddress: findColumn(parsed[0], ['Adresse parent', 'Adresse postale', 'Adresse domicile']),
       };
       setColumnMap(autoMap);
       setStep('mapping');
