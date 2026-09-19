@@ -301,7 +301,9 @@ router.post(
         studentsByClassKey.set(rowKey, studentId);
         const nameKey = studentKey(firstName, lastName);
         const nameList = studentsByName.get(nameKey) ?? [];
-        if (!nameList.some((s) => s.id === studentId)) nameList.push({ id: studentId, classId });
+        const knownStudent = nameList.find((s) => s.id === studentId);
+        if (knownStudent) knownStudent.classId = classId;
+        else nameList.push({ id: studentId, classId });
         studentsByName.set(nameKey, nameList);
 
         await syncEnrollment(tx, studentId, classId);
