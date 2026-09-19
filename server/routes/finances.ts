@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, paymentCreateSchema, paymentUpdateSchema, parseId } from '../lib/validate';
 import { eurosToCents, centsToEuros } from '../lib/money';
+import { toEnumMethod, toLabelMethod, PAYMENT_METHOD_DEFAULT } from '../lib/paymentMethods';
 
 const router = Router();
 
@@ -14,6 +15,8 @@ type PaymentRow = {
   amountCents: number;
   date: Date;
   method: string | null;
+  reference: string | null;
+  note: string | null;
   studentId: number;
   student: {
     id: number;
@@ -28,6 +31,8 @@ const mapPayment = (p: PaymentRow) => ({
   ...p,
   amountCents: p.amountCents,
   amount: centsToEuros(p.amountCents),
+  // La valeur stockée est la clé d'enum ; le frontend affiche le label français.
+  method: toLabelMethod(p.method),
 });
 
 // GET /api/finances
@@ -47,15 +52,23 @@ router.post(
   '/',
   validate(paymentCreateSchema),
   asyncHandler(async (req, res) => {
-    const { amount, studentId, method } = req.body as {
+    const { amount, studentId, method, reference, note } = req.body as {
       amount: number;
       studentId: number;
       method: string | null;
+      reference: string | null;
+      note: string | null;
     };
     const student = await prisma.student.findUnique({ where: { id: studentId } });
     if (!student) throw new AppError(400, 'Élève introuvable');
     const payment = await prisma.payment.create({
-      data: { amountCents: eurosToCents(amount), studentId, method: method ?? 'Espèces' },
+      data: {
+        amountCents: eurosToCents(amount),
+        studentId,
+        method: toEnumMethod(method) ?? PAYMENT_METHOD_DEFAULT,
+        reference,
+        note,
+      },
       include: { student: { include: { class: true } } },
     });
     res.status(201).json(mapPayment(payment as PaymentRow));
@@ -68,12 +81,22 @@ router.put(
   validate(paymentUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de paiement invalide');
-    const { amount, method } = req.body as { amount: number; method: string | null };
+    const { amount, method, reference, note } = req.body as {
+      amount: number;
+      method: string | null;
+      reference: string | null;
+      note: string | null;
+    };
     const exists = await prisma.payment.findUnique({ where: { id } });
     if (!exists) throw new AppError(404, 'Paiement introuvable');
     const payment = await prisma.payment.update({
       where: { id },
-      data: { amountCents: eurosToCents(amount), method: method ?? 'Espèces' },
+      data: {
+        amountCents: eurosToCents(amount),
+        method: method === null || method === undefined ? exists.method : (toEnumMethod(method) ?? PAYMENT_METHOD_DEFAULT),
+        reference,
+        note,
+      },
       include: { student: { include: { class: true } } },
     });
     res.json(mapPayment(payment as PaymentRow));
