@@ -9,12 +9,27 @@ export type Payment = {
   method: string | null;
 };
 
+export type StudentFamily = {
+  id: number;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+};
+
 export type Student = {
   id: number;
   firstName: string;
   lastName: string;
   phone: string | null;
+  dateOfBirth: string | null;
+  ageInOctober2026: number | null;
+  wasEnrolled2025_2026: boolean | null;
+  arabicCourse: string | null;
+  quranCourse: string | null;
   classId: number | null;
+  familyId: number | null;
+  family: StudentFamily | null;
   class: { id: number; name: string; tuitionFee: number; tuitionFeeCents: number } | null;
   payments: Payment[];
   totalPaid: number;
@@ -22,11 +37,24 @@ export type Student = {
   remaining: number;
 };
 
+export type StudentParentInput = {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+};
+
 export type StudentInput = {
   firstName: string;
   lastName: string;
   phone: string | null;
+  dateOfBirth?: string | null;
+  wasEnrolled2025_2026?: boolean | null;
+  arabicCourse?: string | null;
+  quranCourse?: string | null;
   classId: number | null;
+  familyId?: number | null;
+  parent?: StudentParentInput;
 };
 
 /** Source de vérité partagée pour les élèves (liste + écritures). */

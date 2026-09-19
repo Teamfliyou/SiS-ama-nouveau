@@ -119,12 +119,34 @@ const optionalIdField = (label: string) =>
     .optional()
     .transform((v) => (v === '' || v === null || v === undefined ? null : (v as number)));
 
+const optionalDateField = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? null : v === undefined ? null : v),
+  z
+    .union([
+      z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/, 'La date doit être au format YYYY-MM-DD'),
+      z.null(),
+    ])
+    .optional()
+);
+
+const studentParentSchema = z.object({
+  name: optionalTextField('Le nom du parent', 160),
+  phone: optionalPhoneSchema,
+  email: optionalEmailSchema,
+  address: optionalTextField("L'adresse du parent", 255),
+});
+
 export const studentCreateSchema = z.object({
   firstName: nameField('Le prénom'),
   lastName: nameField('Le nom'),
   phone: optionalPhoneSchema,
+  dateOfBirth: optionalDateField,
+  wasEnrolled2025_2026: z.boolean().nullable().optional(),
+  arabicCourse: optionalTextField('ARABE', 120),
+  quranCourse: optionalTextField('CORAN', 120),
   classId: optionalIdField('La classe doit être un entier positif'),
   familyId: optionalIdField('La famille doit être un entier positif'),
+  parent: studentParentSchema.optional(),
 });
 
 export const teacherCreateSchema = z.object({
