@@ -72,8 +72,12 @@ model Student {
   id          Int          @id @default(autoincrement())
   firstName   String
   lastName    String
-  phone       String?
-  classId     Int?
+  phone                  String?
+  dateOfBirth            DateTime? @db.Date
+  wasEnrolled2025_2026   Boolean?
+  arabicCourse           String?
+  quranCourse            String?
+  classId                Int?
   class       Class?       @relation(fields: [classId], references: [id], onDelete: SetNull)
   familyId    Int?
   family      Family?      @relation(fields: [familyId], references: [id], onDelete: SetNull)
