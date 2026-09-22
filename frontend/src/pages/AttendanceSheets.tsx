@@ -17,7 +17,7 @@ const formatDateLong = (d: Date) =>
 const formatDateShort = (d: Date) =>
   d.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit', year: '2-digit' });
 
-export default function AttendanceSheets() {
+export default function AttendanceSheets({ embedded = false }: { embedded?: boolean } = {}) {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
@@ -53,13 +53,15 @@ export default function AttendanceSheets() {
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
-      <div className="no-print">
-        <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Feuilles d'appel</h2>
-        <p className="mt-2 text-sm text-slate-500">
-          Générez une feuille d'appel imprimable par classe. Choisissez la première date : le système ajoute
-          automatiquement 4 autres dates, le même jour de la semaine à 1 semaine d'intervalle (5 utilisations).
-        </p>
-      </div>
+      {!embedded && (
+        <div className="no-print">
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Feuilles d'appel</h2>
+          <p className="mt-2 text-sm text-slate-500">
+            Générez une feuille d'appel imprimable par classe. Choisissez la première date : le système ajoute
+            automatiquement 4 autres dates, le même jour de la semaine à 1 semaine d'intervalle (5 utilisations).
+          </p>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="no-print bg-white rounded-2xl border border-slate-100 shadow-sm p-6">

@@ -2,17 +2,84 @@ import { useState, useRef } from 'react';
 import { UploadCloud, FileText, ArrowRight, CheckCircle2, AlertTriangle, X, RefreshCw, Download } from 'lucide-react';
 import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
 import { formatCurrency } from '../utils/format';
-import { parseCSV, downloadCsv, downloadExcel } from '../utils/csv';
+import { parseCSV, downloadCsv, downloadExcel, findColumn } from '../utils/csv';
 
 type Step = 'upload' | 'mapping' | 'preview' | 'done';
-type ColumnMap = { firstName: string; lastName: string; className: string; tuitionFee: string; phone: string };
-type ImportResult = { createdStudents: number; createdClasses: number; skipped?: number; errors?: { row: number; reason: string }[] };
 
-export default function CsvImport() {
+type ColumnMap = {
+  firstName: string;
+  lastName: string;
+  className: string;
+  tuitionFee: string;
+  phone: string;
+  familyRef: string;
+  familySize: string;
+  parentEmail: string;
+  wasEnrolled2025_2026: string;
+  arabicCourse: string;
+  quranCourse: string;
+  dateOfBirth: string;
+  ageInOctober2026: string;
+  parentName: string;
+  parentAddress: string;
+};
+
+type ImportResult = {
+  createdStudents: number;
+  updatedStudents?: number;
+  createdClasses: number;
+  createdFamilies?: number;
+  linkedFamilies?: number;
+  skipped?: number;
+  errors?: { row: number; reason: string }[];
+};
+
+const EMPTY_COLUMN_MAP: ColumnMap = {
+  firstName: '',
+  lastName: '',
+  className: '',
+  tuitionFee: '',
+  phone: '',
+  familyRef: '',
+  familySize: '',
+  parentEmail: '',
+  wasEnrolled2025_2026: '',
+  arabicCourse: '',
+  quranCourse: '',
+  dateOfBirth: '',
+  ageInOctober2026: '',
+  parentName: '',
+  parentAddress: '',
+};
+
+const cell = (row: string[], headers: string[], header: string): string =>
+  header ? row[headers.indexOf(header)]?.trim() || '' : '';
+
+const parseOptionalNumber = (value: string): number | undefined => {
+  if (!value.trim()) return undefined;
+  const n = Number(value.trim().replace(',', '.'));
+  return Number.isFinite(n) ? n : undefined;
+};
+
+const parseOptionalInteger = (value: string): number | null => {
+  if (!value.trim()) return null;
+  const n = Number.parseInt(value.trim(), 10);
+  return Number.isFinite(n) ? n : null;
+};
+
+const parseEnrollmentAnswer = (value: string): boolean | null => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'oui' || normalized === 'yes' || normalized === 'true' || normalized === '1') return true;
+  if (normalized.startsWith('non') || normalized === 'no' || normalized === 'false' || normalized === '0') return false;
+  return null;
+};
+
+export default function CsvImport({ embedded = false }: { embedded?: boolean } = {}) {
   const [step, setStep] = useState<Step>('upload');
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
-  const [columnMap, setColumnMap] = useState<ColumnMap>({ firstName: '', lastName: '', className: '', tuitionFee: '', phone: '' });
+  const [columnMap, setColumnMap] = useState<ColumnMap>(EMPTY_COLUMN_MAP);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState('');
@@ -31,16 +98,28 @@ export default function CsvImport() {
       if (parsed.length < 2) { setError('Le fichier est vide ou invalide.'); return; }
       setHeaders(parsed[0]);
       setRows(parsed.slice(1));
-      // Auto-detect common column names
-      const autoMap = { firstName: '', lastName: '', className: '', tuitionFee: '', phone: '' };
-      parsed[0].forEach(h => {
-        const lower = h.toLowerCase();
-        if (!autoMap.firstName && (lower.includes('prénom') || lower.includes('prenom') || lower === 'firstname')) autoMap.firstName = h;
-        else if (!autoMap.lastName && (lower.includes('nom') || lower === 'lastname')) autoMap.lastName = h;
-        else if (!autoMap.className && (lower.includes('classe') || lower === 'class')) autoMap.className = h;
-        else if (!autoMap.tuitionFee && (lower.includes('frais') || lower.includes('fee') || lower.includes('tarif') || lower.includes('prix'))) autoMap.tuitionFee = h;
-        else if (!autoMap.phone && (lower.includes('téléphone') || lower.includes('telephone') || lower.includes('tel') || lower.includes('portable') || lower.includes('contact') || lower === 'phone')) autoMap.phone = h;
-      });
+      // Détection automatique des colonnes du formulaire AMA 2026-2027.
+      const autoMap: ColumnMap = {
+        firstName: findColumn(parsed[0], ['Prénom', 'Prenom', 'firstname']),
+        lastName: findColumn(parsed[0], ['Nom', 'lastname']),
+        className: findColumn(parsed[0], ['Classe', 'class']),
+        tuitionFee: findColumn(parsed[0], ['Frais', 'Tarif', 'Prix', 'fee']),
+        phone: findColumn(parsed[0], ['Téléphone', 'Telephone', 'phone', 'portable', 'contact']),
+        familyRef: findColumn(parsed[0], ['ID Famille', 'Identifiant famille', 'Family ID']),
+        familySize: findColumn(parsed[0], ['Nb élèves famille', 'Nb eleves famille', 'Nombre élèves famille']),
+        parentEmail: findColumn(parsed[0], ['Adresse e-mail', 'Adresse email', 'Email parent', 'E-mail parent']),
+        wasEnrolled2025_2026: findColumn(parsed[0], [
+          'Votre enfant était inscrit en 2025-2026 ?',
+          'Inscrit en 2025-2026',
+          '2025-2026',
+        ]),
+        arabicCourse: findColumn(parsed[0], ['ARABE']),
+        quranCourse: findColumn(parsed[0], ['CORAN']),
+        dateOfBirth: findColumn(parsed[0], ['Date de naissance', 'Date naissance', 'Naissance']),
+        ageInOctober2026: findColumn(parsed[0], ['Age en Octobre 2026', 'Âge en Octobre 2026']),
+        parentName: findColumn(parsed[0], ['NOM & Prénom', 'Nom & Prénom', 'Nom parent', 'Parent']),
+        parentAddress: findColumn(parsed[0], ['Adresse parent', 'Adresse postale', 'Adresse domicile']),
+      };
       setColumnMap(autoMap);
       setStep('mapping');
     };
@@ -53,13 +132,29 @@ export default function CsvImport() {
     if (file) handleFile(file);
   };
 
-  const mappedRows = rows.map(row => ({
-    firstName: columnMap.firstName ? row[headers.indexOf(columnMap.firstName)] || '' : '',
-    lastName: columnMap.lastName ? row[headers.indexOf(columnMap.lastName)] || '' : '',
-    className: columnMap.className ? row[headers.indexOf(columnMap.className)] || '' : '',
-    tuitionFee: columnMap.tuitionFee ? parseFloat(row[headers.indexOf(columnMap.tuitionFee)]) || 0 : undefined,
-    phone: columnMap.phone ? row[headers.indexOf(columnMap.phone)] || '' : '',
-  })).filter(r => r.firstName || r.lastName);
+  const mappedRows = rows.map(row => {
+    const feeRaw = cell(row, headers, columnMap.tuitionFee);
+    const familySizeRaw = cell(row, headers, columnMap.familySize);
+    const ageRaw = cell(row, headers, columnMap.ageInOctober2026);
+
+    return {
+      firstName: cell(row, headers, columnMap.firstName),
+      lastName: cell(row, headers, columnMap.lastName),
+      className: cell(row, headers, columnMap.className) || null,
+      tuitionFee: feeRaw ? parseOptionalNumber(feeRaw) : undefined,
+      phone: cell(row, headers, columnMap.phone) || null,
+      familyRef: cell(row, headers, columnMap.familyRef) || null,
+      familySize: familySizeRaw ? parseOptionalInteger(familySizeRaw) : null,
+      parentEmail: cell(row, headers, columnMap.parentEmail) || null,
+      wasEnrolled2025_2026: parseEnrollmentAnswer(cell(row, headers, columnMap.wasEnrolled2025_2026)),
+      arabicCourse: cell(row, headers, columnMap.arabicCourse) || null,
+      quranCourse: cell(row, headers, columnMap.quranCourse) || null,
+      dateOfBirth: cell(row, headers, columnMap.dateOfBirth) || null,
+      ageInOctober2026: ageRaw ? parseOptionalInteger(ageRaw) : null,
+      parentName: cell(row, headers, columnMap.parentName) || null,
+      parentAddress: cell(row, headers, columnMap.parentAddress) || null,
+    };
+  }).filter(r => r.firstName || r.lastName);
 
   const handleImport = async () => {
     setImporting(true); setError('');
@@ -77,43 +172,22 @@ export default function CsvImport() {
     } finally { setImporting(false); }
   };
 
+  const sampleContent = () => [
+    'Prénom,Nom,Classe,Frais,Téléphone,ID Famille,Nb élèves famille,Adresse e-mail,Votre enfant était inscrit en 2025-2026 ?,ARABE,CORAN,Date de naissance,Age en Octobre 2026,NOM & Prénom',
+    'Naël,Philippe,Ateliers 4 ans,130,07 73 81 22 80,FAM001,1,parent@example.com,"Non, c\'est une nouvelle inscription",Ateliers 4 ans,,2022-06-11,4,Parent Exemple',
+  ].join('\n');
+
   const downloadSample = () => {
-    const content = [
-      'Prénom,Nom,Classe,Frais,Téléphone',
-      'Jean,Dupont,6ème A,150,06 12 34 56 78',
-      'Marie,Martin,6ème A,150,07 23 45 67 89',
-      'Paul,Leblanc,6ème B,150,06 34 56 78 90',
-      'Sophie,Bernard,6ème B,150,07 45 67 89 01',
-      'Lucas,Moreau,5ème A,180,06 56 78 90 12',
-      'Emma,Petit,5ème A,180,07 67 89 01 23',
-      'Hugo,Laurent,5ème B,180,06 78 90 12 34',
-      'Camille,Simon,4ème A,200,07 89 01 23 45',
-      'Nathan,Michel,4ème A,200,06 90 12 34 56',
-      'Léa,Lefebvre,3ème A,220,07 01 23 45 67',
-    ].join('\n');
-    downloadCsv('eleves_exemple.csv', content);
+    downloadCsv('eleves_exemple_complet.csv', sampleContent());
   };
 
   const downloadSampleExcel = () => {
-    const content = [
-      'Prénom,Nom,Classe,Frais,Téléphone',
-      'Jean,Dupont,6ème A,150,06 12 34 56 78',
-      'Marie,Martin,6ème A,150,07 23 45 67 89',
-      'Paul,Leblanc,6ème B,150,06 34 56 78 90',
-      'Sophie,Bernard,6ème B,150,07 45 67 89 01',
-      'Lucas,Moreau,5ème A,180,06 56 78 90 12',
-      'Emma,Petit,5ème A,180,07 67 89 01 23',
-      'Hugo,Laurent,5ème B,180,06 78 90 12 34',
-      'Camille,Simon,4ème A,200,07 89 01 23 45',
-      'Nathan,Michel,4ème A,200,06 90 12 34 56',
-      'Léa,Lefebvre,3ème A,220,07 01 23 45 67',
-    ].join('\n');
-    downloadExcel('eleves_exemple.xls', content);
+    downloadExcel('eleves_exemple_complet.xls', sampleContent());
   };
 
   const reset = () => {
     setStep('upload'); setHeaders([]); setRows([]); setFileName('');
-    setColumnMap({ firstName: '', lastName: '', className: '', tuitionFee: '', phone: '' });
+    setColumnMap(EMPTY_COLUMN_MAP);
     setResult(null); setError('');
     if (fileRef.current) fileRef.current.value = '';
   };
@@ -128,10 +202,12 @@ export default function CsvImport() {
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
-      <div>
-        <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Import CSV</h2>
-        <p className="mt-2 text-sm text-slate-500">Importez des élèves et leurs classes depuis un fichier CSV.</p>
-      </div>
+      {!embedded && (
+        <div>
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Import CSV</h2>
+          <p className="mt-2 text-sm text-slate-500">Importez les élèves, classes, familles et toutes les informations du formulaire d’inscription.</p>
+        </div>
+      )}
 
       {/* Stepper */}
       <div className="flex items-center gap-0">
@@ -180,9 +256,8 @@ export default function CsvImport() {
             <div>
               <p className="text-xs font-bold text-slate-500 uppercase mb-2">Exemple de fichier</p>
               <code className="text-xs text-slate-600 font-mono">
-                Prénom,Nom,Classe,Frais<br/>
-                Jean,Dupont,6ème A,150<br/>
-                Marie,Martin,6ème B,150
+                Prénom,Nom,Classe,Frais,Téléphone,ID Famille…<br/>
+                Naël,Philippe,Ateliers 4 ans,130,07…,FAM001…
               </code>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -219,10 +294,20 @@ export default function CsvImport() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {([
               { key: 'firstName', label: 'Prénom', required: true },
-              { key: 'lastName',  label: 'Nom',    required: true },
-              { key: 'className', label: 'Classe',  required: false },
-              { key: 'tuitionFee', label: 'Frais de scolarité (optionnel)', required: false },
-              { key: 'phone', label: 'Téléphone (optionnel)', required: false },
+              { key: 'lastName', label: 'Nom', required: true },
+              { key: 'className', label: 'Classe', required: false },
+              { key: 'tuitionFee', label: 'Frais de scolarité', required: false },
+              { key: 'phone', label: 'Téléphone / contact parent', required: false },
+              { key: 'dateOfBirth', label: 'Date de naissance', required: false },
+              { key: 'wasEnrolled2025_2026', label: 'Inscrit en 2025-2026 ?', required: false },
+              { key: 'arabicCourse', label: 'ARABE', required: false },
+              { key: 'quranCourse', label: 'CORAN', required: false },
+              { key: 'familyRef', label: 'ID Famille', required: false },
+              { key: 'familySize', label: 'Nb élèves famille (informatif)', required: false },
+              { key: 'parentName', label: 'Nom & prénom du parent', required: false },
+              { key: 'parentEmail', label: 'Adresse e-mail parent', required: false },
+              { key: 'parentAddress', label: 'Adresse parent', required: false },
+              { key: 'ageInOctober2026', label: 'Âge en octobre 2026 (informatif)', required: false },
             ] as const).map(field => (
               <div key={field.key}>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -267,7 +352,7 @@ export default function CsvImport() {
               <p className="font-bold text-slate-800">{mappedRows.length} élève{mappedRows.length > 1 ? 's' : ''} à importer</p>
               <button onClick={() => setStep('mapping')} className="text-sm text-primary font-medium hover:text-blue-700">Modifier le mapping</button>
             </div>
-            <div className="max-h-96 overflow-y-auto">
+            <div className="max-h-96 overflow-auto">
               <table className="min-w-full divide-y divide-slate-100">
                 <thead className="bg-white sticky top-0">
                   <tr>
@@ -277,6 +362,12 @@ export default function CsvImport() {
                     <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Classe</th>
                     {columnMap.tuitionFee && <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Frais</th>}
                     {columnMap.phone && <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Téléphone</th>}
+                    {columnMap.dateOfBirth && <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Naissance</th>}
+                    {columnMap.parentName && <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Parent</th>}
+                    {columnMap.parentEmail && <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">E-mail</th>}
+                    {columnMap.familyRef && <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Famille</th>}
+                    {columnMap.arabicCourse && <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">ARABE</th>}
+                    {columnMap.quranCourse && <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase">CORAN</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -288,6 +379,12 @@ export default function CsvImport() {
                       <td className="px-5 py-3 text-sm text-slate-500">{row.className || <span className="text-slate-300 italic">—</span>}</td>
                       {columnMap.tuitionFee && <td className="px-5 py-3 text-sm text-emerald-600 font-semibold">{row.tuitionFee ? formatCurrency(row.tuitionFee) : '—'}</td>}
                       {columnMap.phone && <td className="px-5 py-3 text-sm text-slate-500">{row.phone || <span className="text-slate-300 italic">—</span>}</td>}
+                      {columnMap.dateOfBirth && <td className="px-5 py-3 text-sm text-slate-500 whitespace-nowrap">{row.dateOfBirth || '—'}</td>}
+                      {columnMap.parentName && <td className="px-5 py-3 text-sm text-slate-500 whitespace-nowrap">{row.parentName || '—'}</td>}
+                      {columnMap.parentEmail && <td className="px-5 py-3 text-sm text-slate-500 whitespace-nowrap">{row.parentEmail || '—'}</td>}
+                      {columnMap.familyRef && <td className="px-5 py-3 text-sm text-slate-500">{row.familyRef || '—'}</td>}
+                      {columnMap.arabicCourse && <td className="px-5 py-3 text-sm text-slate-500 whitespace-nowrap">{row.arabicCourse || '—'}</td>}
+                      {columnMap.quranCourse && <td className="px-5 py-3 text-sm text-slate-500 whitespace-nowrap">{row.quranCourse || '—'}</td>}
                     </tr>
                   ))}
                 </tbody>
@@ -318,11 +415,23 @@ export default function CsvImport() {
             <h3 className="text-2xl font-black text-slate-800">Import réussi !</h3>
             <p className="text-slate-500 mt-2 text-sm">Les données ont été ajoutées à la base.</p>
           </div>
-          <div className="flex justify-center gap-6">
+          <div className="flex flex-wrap justify-center gap-4">
             <div className="bg-blue-50 border border-blue-100 rounded-2xl px-8 py-5">
               <p className="text-3xl font-black text-primary">{result.createdStudents}</p>
               <p className="text-sm text-slate-600 mt-1">élève{result.createdStudents > 1 ? 's' : ''} créé{result.createdStudents > 1 ? 's' : ''}</p>
             </div>
+            {!!result.updatedStudents && (
+              <div className="bg-cyan-50 border border-cyan-100 rounded-2xl px-8 py-5">
+                <p className="text-3xl font-black text-cyan-700">{result.updatedStudents}</p>
+                <p className="text-sm text-slate-600 mt-1">fiche{result.updatedStudents > 1 ? 's' : ''} mise{result.updatedStudents > 1 ? 's' : ''} à jour</p>
+              </div>
+            )}
+            {!!result.linkedFamilies && (
+              <div className="bg-violet-50 border border-violet-100 rounded-2xl px-8 py-5">
+                <p className="text-3xl font-black text-violet-700">{result.linkedFamilies}</p>
+                <p className="text-sm text-slate-600 mt-1">famille{result.linkedFamilies > 1 ? 's' : ''} liée{result.linkedFamilies > 1 ? 's' : ''}</p>
+              </div>
+            )}
             <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-8 py-5">
               <p className="text-3xl font-black text-indigo-600">{result.createdClasses}</p>
               <p className="text-sm text-slate-600 mt-1">classe{result.createdClasses > 1 ? 's' : ''} créée{result.createdClasses > 1 ? 's' : ''}</p>
@@ -330,7 +439,7 @@ export default function CsvImport() {
             {!!result.skipped && (
               <div className="bg-amber-50 border border-amber-100 rounded-2xl px-8 py-5">
                 <p className="text-3xl font-black text-amber-600">{result.skipped}</p>
-                <p className="text-sm text-slate-600 mt-1">doublon{result.skipped! > 1 ? 's' : ''} ignoré{result.skipped! > 1 ? 's' : ''}</p>
+                <p className="text-sm text-slate-600 mt-1">ligne{result.skipped! > 1 ? 's' : ''} ignorée{result.skipped! > 1 ? 's' : ''}</p>
               </div>
             )}
           </div>

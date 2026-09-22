@@ -75,12 +75,21 @@ export default function Finances() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentId && !editingId) return;
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      toast.error('Le montant doit être un nombre supérieur à zéro');
+      return;
+    }
+    const numericStudentId = Number(studentId);
+    if (!editingId && (!Number.isInteger(numericStudentId) || numericStudentId <= 0)) {
+      toast.error('Veuillez sélectionner un élève');
+      return;
+    }
     setLoading(true);
     try {
       const body = editingId
-        ? JSON.stringify({ amount, method })
-        : JSON.stringify({ amount, studentId, method });
+        ? JSON.stringify({ amount: numericAmount, method })
+        : JSON.stringify({ amount: numericAmount, studentId: numericStudentId, method });
       const res = editingId
         ? await authFetch(`/api/finances/${editingId}`, { method: 'PUT', body })
         : await authFetch('/api/finances', { method: 'POST', body });
@@ -215,7 +224,7 @@ export default function Finances() {
                 <label className="block text-sm font-medium text-slate-700">Montant (€)</label>
                 <div className="relative mt-1">
                   <input 
-                    type="number" required step="0.01"
+                    type="number" required step="0.01" min="0.01"
                     className="block w-full px-3 py-2 pl-9 border border-slate-200 rounded-lg shadow-sm focus:ring-2 focus:ring-primary transition-all"
                     value={amount} onChange={e => setAmount(e.target.value)}
                   />
