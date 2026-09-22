@@ -71,7 +71,7 @@ export default function Teachers() {
     setLoading(true); setError('');
     try {
       const body = JSON.stringify({
-        ...form, classId: form.classId || null,
+        ...form, classId: form.classId ? Number(form.classId) : null,
         email: form.email || null, phone: form.phone || null, subject: form.subject || null
       });
       const res = editingId

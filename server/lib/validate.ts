@@ -123,7 +123,10 @@ const optionalDateField = z.preprocess(
   (v) => (typeof v === 'string' && v.trim() === '' ? null : v === undefined ? null : v),
   z
     .union([
-      z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/, 'La date doit être au format YYYY-MM-DD'),
+      z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, 'La date doit être au format YYYY-MM-DD')
+        .refine(isRealDateString, { message: 'Date inexistante' }),
       z.null(),
     ])
     .optional()
