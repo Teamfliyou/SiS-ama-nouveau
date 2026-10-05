@@ -19,11 +19,11 @@ export default function ToastContainer() {
   if (items.length === 0) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-[100] w-full max-w-sm space-y-3">
+    <div className="fixed bottom-6 right-6 z-[100] w-full max-w-sm space-y-3 mobile:right-3 mobile:left-3 mobile:w-auto mobile:max-w-none mobile:bottom-auto mobile:top-[calc(var(--safe-top)+8px)] mobile:space-y-2">
       {items.map(t => (
         <div
           key={t.id}
-          className={`flex items-start gap-3 p-4 rounded-xl shadow-lg border bg-white animate-in fade-in slide-in-from-right-4 duration-200 ${
+          className={`flex items-start gap-3 p-4 rounded-xl shadow-lg border bg-white mobile:rounded-2xl mobile:p-3.5 mobile:bg-white/95 mobile:backdrop-blur-xl mobile:anim-fade-in animate-in fade-in slide-in-from-right-4 duration-200 ${
             t.kind === 'success' ? 'border-emerald-200' : 'border-red-200'
           }`}
         >

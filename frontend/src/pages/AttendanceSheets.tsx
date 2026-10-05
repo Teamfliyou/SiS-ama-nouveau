@@ -51,9 +51,12 @@ export default function AttendanceSheets() {
   const className = classes.find(c => c.id === parseInt(selectedClass))?.name || '';
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-5xl mx-auto space-y-8 mobile:space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
-      <div className="no-print">
+      <p className="no-print hidden mobile:block px-1 text-[13px] leading-relaxed text-slate-500">
+        Choisissez une classe et la première date : 4 autres séances sont ajoutées, à une semaine d'intervalle.
+      </p>
+      <div className="no-print mobile:hidden">
         <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Feuilles d'appel</h2>
         <p className="mt-2 text-sm text-slate-500">
           Générez une feuille d'appel imprimable par classe. Choisissez la première date : le système ajoute
@@ -62,11 +65,11 @@ export default function AttendanceSheets() {
       </div>
 
       {/* Controls */}
-      <div className="no-print bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <div className="no-print bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mobile:p-0 mobile:bg-transparent mobile:border-0 mobile:shadow-none">
+        <div className="flex flex-col sm:flex-row gap-4 mobile:gap-3">
           {/* Class selector */}
           <div className="flex-1">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
+            <label className="block text-sm font-semibold text-slate-700 mb-2 mobile:text-[13px] mobile:text-slate-600 mobile:mb-1.5">
               <ClipboardCheck className="inline w-4 h-4 mr-1.5 text-primary" />
               Classe
             </label>
@@ -74,7 +77,7 @@ export default function AttendanceSheets() {
               <select
                 value={selectedClass}
                 onChange={e => setSelectedClass(e.target.value)}
-                className="w-full appearance-none pl-4 pr-10 py-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm font-medium text-slate-700 shadow-sm"
+                className="w-full appearance-none pl-4 pr-10 py-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm font-medium text-slate-700 shadow-sm mobile:py-2 mobile:shadow-none"
               >
                 <option value="">-- Sélectionner une classe --</option>
                 {classes.map(c => (
@@ -88,8 +91,8 @@ export default function AttendanceSheets() {
           </div>
 
           {/* First date picker */}
-          <div className="sm:w-56">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
+          <div className="sm:w-56 mobile:w-full">
+            <label className="block text-sm font-semibold text-slate-700 mb-2 mobile:text-[13px] mobile:text-slate-600 mobile:mb-1.5">
               <Calendar className="inline w-4 h-4 mr-1.5 text-primary" />
               Première date
             </label>
@@ -97,7 +100,7 @@ export default function AttendanceSheets() {
               type="date"
               value={firstDate}
               onChange={e => setFirstDate(e.target.value)}
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm font-medium text-slate-700 shadow-sm"
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm font-medium text-slate-700 shadow-sm mobile:py-2 mobile:shadow-none"
             />
           </div>
         </div>
@@ -108,7 +111,7 @@ export default function AttendanceSheets() {
         <div className="no-print flex justify-end">
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-primary hover:bg-blue-600 shadow-md shadow-primary/20 transition-all"
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-primary hover:bg-blue-600 shadow-md shadow-primary/20 transition-all mobile:w-full mobile:justify-center mobile:min-h-[48px] mobile:text-[15px] mobile:font-semibold"
           >
             <Printer className="w-4 h-4" /> Imprimer la feuille d'appel
           </button>
@@ -118,9 +121,9 @@ export default function AttendanceSheets() {
       {/* Sheet */}
       {selectedClass ? (
         className ? (
-          <div className="print-area bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-10">
+          <div className="print-area bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-10 mobile:p-4">
             {/* Sheet header */}
-            <div className="flex items-start justify-between gap-4 border-b-2 border-slate-800 pb-4">
+            <div className="flex items-start justify-between gap-4 border-b-2 border-slate-800 pb-4 mobile:flex-col mobile:gap-3">
               <div className="flex items-center gap-3">
                 <img src="/logo.png" alt="Logo" className="h-12 w-auto object-contain" />
                 <div>
@@ -128,7 +131,7 @@ export default function AttendanceSheets() {
                   <p className="text-xs text-slate-500">Association Musulmane Audomaroise</p>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-right mobile:text-left">
                 <p className="text-base font-bold text-slate-900 uppercase">Feuille d'appel</p>
                 <p className="text-sm text-slate-700">
                   Classe : <span className="font-bold">{className}</span>
@@ -140,11 +143,11 @@ export default function AttendanceSheets() {
             </div>
 
             {/* Dates summary */}
-            <div className="mt-4 grid grid-cols-5 gap-2 text-center">
+            <div className="mt-4 grid grid-cols-5 gap-2 text-center mobile:gap-1">
               {dates.map((d, i) => (
-                <div key={i} className="rounded-lg border border-slate-200 px-1 py-2">
-                  <p className="text-xs font-bold text-slate-800">Séance {i + 1}</p>
-                  <p className="text-[11px] text-slate-500 capitalize">{formatDateLong(d).split(' ')[0]}</p>
+                <div key={i} className="rounded-lg border border-slate-200 px-1 py-2 min-w-0">
+                  <p className="text-xs font-bold text-slate-800 mobile:text-[10px]"><span className="mobile:hidden">Séance </span><span className="hidden mobile:inline">S</span>{i + 1}</p>
+                  <p className="text-[11px] text-slate-500 capitalize truncate mobile:text-[10px]">{formatDateLong(d).split(' ')[0]}</p>
                   <p className="text-sm font-semibold text-slate-700">
                     {d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
                   </p>
@@ -153,11 +156,12 @@ export default function AttendanceSheets() {
             </div>
 
             {/* Attendance table */}
-            <table className="w-full border-collapse text-sm mt-5">
+            <div className="mt-5 overflow-x-auto print:overflow-visible mobile:-mx-4 mobile:px-4" data-hscroll>
+            <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-slate-100 print:bg-transparent">
                   <th className="border border-slate-400 px-2 py-2 w-10 text-center font-bold text-slate-700">N°</th>
-                  <th className="border border-slate-400 px-3 py-2 text-left font-bold text-slate-700 uppercase">
+                  <th className="border border-slate-400 px-3 py-2 text-left font-bold text-slate-700 uppercase mobile:min-w-[160px]">
                     Nom & prénom
                   </th>
                   {dates.map((d, i) => (
@@ -192,6 +196,7 @@ export default function AttendanceSheets() {
                 )}
               </tbody>
             </table>
+            </div>
 
             {/* Legend + count */}
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
@@ -204,7 +209,7 @@ export default function AttendanceSheets() {
             </div>
 
             {/* Signatures */}
-            <div className="mt-8 pt-4 border-t border-slate-300 flex items-end justify-between gap-6 text-sm text-slate-700">
+            <div className="mt-8 pt-4 border-t border-slate-300 flex items-end justify-between gap-6 text-sm text-slate-700 mobile:gap-4">
               <div className="flex-1">
                 <p>Signature de l'enseignant :</p>
                 <p className="mt-16 border-b border-slate-400" />
@@ -221,7 +226,7 @@ export default function AttendanceSheets() {
           </div>
         )
       ) : (
-        <div className="no-print text-center py-20 bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="no-print text-center py-20 bg-white rounded-2xl border border-slate-100 shadow-sm mobile:py-12 mobile:px-6">
           <ClipboardCheck className="w-14 h-14 mx-auto text-slate-200 mb-4" />
           <p className="font-semibold text-slate-500">Sélectionnez une classe pour générer la feuille d'appel.</p>
         </div>

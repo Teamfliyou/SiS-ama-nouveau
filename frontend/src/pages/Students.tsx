@@ -1,8 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Users, Plus, Pencil, Trash2, X, Save, Search, SlidersHorizontal, ChevronDown, Eye, Loader2 } from 'lucide-react';
 import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
 import { formatCurrency } from '../utils/format';
 import { toast } from '../utils/toast';
+import { useIsMobile } from '../hooks/useIsMobile';
+import Sheet from '../components/mobile/Sheet';
+import ActionMenu from '../components/mobile/ActionMenu';
+import { mList, mInput, mAddBtn, mPrimaryBtn } from '../components/mobile/styles';
 
 type Student = {
   id: number;
@@ -38,10 +43,22 @@ export default function Students() {
   const [filterStatus, setFilterStatus] = useState(''); // '' | 'paid' | 'unpaid'
   const [sortBy, setSortBy] = useState<'name' | 'class' | 'remaining'>('name');
 
+  // Mobile : formulaire et filtres en bottom sheet
+  const isMobile = useIsMobile();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [formOpen, setFormOpen] = useState(() => !!(location.state as { openForm?: boolean } | null)?.openForm);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
   useEffect(() => {
     fetchStudents();
     fetchClasses();
   }, []);
+
+  // Consomme l'intention « ouvrir le formulaire » venant du tableau de bord.
+  useEffect(() => {
+    if ((location.state as { openForm?: boolean } | null)?.openForm) navigate(location.pathname, { replace: true, state: null });
+  }, [location, navigate]);
 
   const fetchStudents = async () => {
     try {
@@ -107,6 +124,7 @@ export default function Students() {
     setLastName(st.lastName);
     setPhone(st.phone || '');
     setClassId(st.classId ? st.classId.toString() : '');
+    setFormOpen(true);
   };
 
   const resetForm = () => {
@@ -115,7 +133,10 @@ export default function Students() {
     setLastName('');
     setPhone('');
     setClassId('');
+    setFormOpen(false);
   };
+
+  const openCreate = () => { resetForm(); setFormOpen(true); };
 
   const resetFilters = () => {
     setSearch('');
@@ -154,13 +175,170 @@ export default function Students() {
     return list;
   }, [students, search, filterClass, filterStatus, sortBy]);
 
+  const studentForm = (
+    <form onSubmit={handleSave} className="space-y-4 mobile:px-5">
+      <div>
+        <label className="block text-sm font-medium text-slate-700">Prénom</label>
+        <input
+          type="text" required
+          className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary mobile:rounded-xl mobile:border-slate-200"
+          value={firstName} onChange={e => setFirstName(e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700">Nom</label>
+        <input
+          type="text" required
+          className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary mobile:rounded-xl mobile:border-slate-200"
+          value={lastName} onChange={e => setLastName(e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700">Téléphone</label>
+        <input
+          type="tel" inputMode="tel" autoComplete="tel"
+          placeholder="06 12 34 56 78"
+          className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary mobile:rounded-xl mobile:border-slate-200"
+          value={phone} onChange={e => setPhone(e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700">Classe (Tarif affilié)</label>
+        <select
+          className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm bg-white focus:ring-primary focus:border-primary mobile:rounded-xl mobile:border-slate-200"
+          value={classId} onChange={e => setClassId(e.target.value)}
+          required
+        >
+          <option value="">Sélectionner une classe</option>
+          {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({formatCurrency(c.tuitionFee)})</option>)}
+        </select>
+        <p className="text-xs text-slate-400 mt-1">Les frais de l'élève dépendent de sa classe.</p>
+      </div>
+      <button
+        type="submit" disabled={loading}
+        className={`w-full flex items-center justify-center py-2 shadow-sm rounded-lg text-sm font-medium text-white transition-colors mobile:min-h-[48px] mobile:rounded-xl mobile:text-[15px] mobile:font-semibold ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-blue-600'}`}
+      >
+        {editingId ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+        {editingId ? 'Sauvegarder' : 'Inscrire'}
+      </button>
+    </form>
+  );
+
+  // ── Téléphone ──
+  const statusLabel = (st: Student) => st.remaining <= 0
+    ? <span className="text-emerald-600">Payé</span>
+    : <span className="text-orange-500">Reste {formatCurrency(st.remaining)}</span>;
+
+  const mobileView = (
+    <div className="space-y-4">
+      {/* Recherche + filtres + ajout */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <input type="search" placeholder="Rechercher un élève" value={search} onChange={e => setSearch(e.target.value)}
+            className={`${mInput} pl-10`} />
+        </div>
+        <button type="button" onClick={() => setFiltersOpen(true)} aria-label="Filtres"
+          className={`relative h-11 w-11 shrink-0 flex items-center justify-center rounded-xl border ${filterClass || filterStatus || sortBy !== 'name' ? 'border-primary/40 bg-blue-50 text-primary' : 'border-slate-200/80 bg-white/90 text-slate-500'}`}>
+          <SlidersHorizontal className="w-5 h-5" />
+          {(filterClass || filterStatus || sortBy !== 'name') && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />}
+        </button>
+        <button type="button" onClick={openCreate} aria-label="Inscrire un élève" className={mAddBtn}>
+          <Plus className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between px-1 text-[13px]">
+        <span className="font-medium text-slate-500">{filtered.length} élève{filtered.length > 1 ? 's' : ''}{filtered.length !== students.length ? ` sur ${students.length}` : ''}</span>
+        {hasActiveFilters && <button onClick={resetFilters} className="min-h-[32px] font-semibold text-primary">Effacer les filtres</button>}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="glass-surface rounded-2xl px-6 py-12 text-center">
+          <Users className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+          <p className="text-[15px] font-medium text-slate-500">{students.length === 0 ? 'Aucun élève inscrit.' : 'Aucun élève ne correspond.'}</p>
+        </div>
+      ) : (
+        <ul className={mList}>
+          {filtered.map(st => (
+            <li key={st.id} className="flex items-center gap-3 pl-4 pr-3 min-h-[64px]">
+              <button type="button" onClick={() => setDetailsStudent(st)} className="flex-1 min-w-0 flex items-center gap-3 py-3 text-left">
+                <span className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-blue-400 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                  {st.firstName[0]}{st.lastName[0]}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold text-slate-900 truncate">{st.firstName} <span className="uppercase">{st.lastName}</span></span>
+                  <span className="block text-[13px] text-slate-500 truncate">
+                    {st.class ? st.class.name : <span className="text-red-400">Sans classe</span>}
+                    <span className="mx-1.5 text-slate-300">·</span>
+                    <span className="font-medium">{statusLabel(st)}</span>
+                  </span>
+                </span>
+              </button>
+              <ActionMenu
+                title={`${st.firstName} ${st.lastName.toUpperCase()}`}
+                actions={[
+                  { label: 'Consulter la fiche', icon: Eye, onClick: () => setDetailsStudent(st) },
+                  { label: 'Modifier', icon: Pencil, onClick: () => openEdit(st) },
+                  { label: 'Supprimer', icon: Trash2, onClick: () => handleDelete(st), danger: true, disabled: deletingId === st.id },
+                ]}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Formulaire */}
+      <Sheet open={formOpen} onClose={resetForm} title={editingId ? "Modifier l'élève" : 'Inscrire un élève'}>
+        {studentForm}
+      </Sheet>
+
+      {/* Filtres */}
+      <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filtrer et trier">
+        <div className="px-5 space-y-4">
+          <label className="block">
+            <span className="block text-[13px] font-semibold text-slate-600 mb-1.5">Classe</span>
+            <select value={filterClass} onChange={e => setFilterClass(e.target.value)} className={mInput}>
+              <option value="">Toutes les classes</option>
+              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <option value="__none__">Sans classe</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-[13px] font-semibold text-slate-600 mb-1.5">Situation financière</span>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={mInput}>
+              <option value="">Toutes situations</option>
+              <option value="paid">Entièrement payé</option>
+              <option value="unpaid">Solde restant</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-[13px] font-semibold text-slate-600 mb-1.5">Trier par</span>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value as 'name' | 'class' | 'remaining')} className={mInput}>
+              <option value="name">Nom</option>
+              <option value="class">Classe</option>
+              <option value="remaining">Solde restant</option>
+            </select>
+          </label>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={resetFilters} className="min-h-[48px] px-4 rounded-xl bg-slate-100 text-[15px] font-semibold text-slate-600">Réinitialiser</button>
+            <button type="button" onClick={() => setFiltersOpen(false)} className={mPrimaryBtn}>
+              Afficher {filtered.length} élève{filtered.length > 1 ? 's' : ''}
+            </button>
+          </div>
+        </div>
+      </Sheet>
+    </div>
+  );
+
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div>
+      <div className="mobile:hidden">
         <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Gestion des Élèves</h2>
         <p className="mt-2 text-sm text-slate-500">Inscrivez et éditez le registre de vos étudiants.</p>
       </div>
 
+      {isMobile ? mobileView : (
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* ── Form ── */}
         <div className="lg:col-span-1">
@@ -175,52 +353,7 @@ export default function Students() {
                 </button>
               )}
             </div>
-            <form onSubmit={handleSave} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Prénom</label>
-                <input
-                  type="text" required
-                  className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary"
-                  value={firstName} onChange={e => setFirstName(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Nom</label>
-                <input
-                  type="text" required
-                  className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary"
-                  value={lastName} onChange={e => setLastName(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Téléphone</label>
-                <input
-                  type="tel"
-                  placeholder="06 12 34 56 78"
-                  className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary"
-                  value={phone} onChange={e => setPhone(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Classe (Tarif affilié)</label>
-                <select
-                  className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm bg-white focus:ring-primary focus:border-primary"
-                  value={classId} onChange={e => setClassId(e.target.value)}
-                  required
-                >
-                  <option value="">Sélectionner une classe</option>
-                  {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({formatCurrency(c.tuitionFee)})</option>)}
-                </select>
-                <p className="text-xs text-slate-400 mt-1">Les frais de l'élève dépendent de sa classe.</p>
-              </div>
-              <button
-                type="submit" disabled={loading}
-                className={`w-full flex items-center justify-center py-2 shadow-sm rounded-lg text-sm font-medium text-white transition-colors ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-blue-600'}`}
-              >
-                {editingId ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                {editingId ? 'Sauvegarder' : 'Inscrire'}
-              </button>
-            </form>
+            {studentForm}
           </div>
         </div>
 
@@ -408,44 +541,46 @@ export default function Students() {
         </div>
       </div>
 
+      )}
+
       {/* ── Student details modal ── */}
-      {detailsStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => setDetailsStudent(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-start p-6 border-b border-slate-100">
+      <Sheet open={!!detailsStudent} onClose={() => setDetailsStudent(null)} maxWidth="max-w-lg">
+        {detailsStudent && (
+          <>
+            <div className="flex justify-between items-start p-6 border-b border-slate-100 mobile:px-5 mobile:pt-1 mobile:pb-4">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-primary to-blue-400 text-white flex items-center justify-center text-sm font-bold">
                   {detailsStudent.firstName[0]}{detailsStudent.lastName[0]}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="font-bold text-slate-900 text-lg">
                     {detailsStudent.firstName} <span className="uppercase">{detailsStudent.lastName}</span>
                   </p>
                   <p className="text-sm text-slate-400">
                     {detailsStudent.class ? `Classe ${detailsStudent.class.name} — Frais : ${formatCurrency(detailsStudent.class.tuitionFee)}` : 'Sans classe'}
                   </p>
-                  {detailsStudent.phone && <p className="text-sm text-slate-400">Tél : {detailsStudent.phone}</p>}
+                  {detailsStudent.phone && <p className="text-sm text-slate-400">Tél : <a href={`tel:${detailsStudent.phone.replace(/\s/g, '')}`} className="mobile:text-primary mobile:font-medium">{detailsStudent.phone}</a></p>}
                 </div>
               </div>
-              <button onClick={() => setDetailsStudent(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setDetailsStudent(null)} aria-label="Fermer" className="text-slate-400 hover:text-slate-600 mobile:hidden">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-5">
+            <div className="p-6 space-y-5 mobile:px-5 mobile:pt-4 mobile:pb-0">
               {/* Financial summary */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-slate-50 rounded-xl p-3 text-center">
+              <div className="grid grid-cols-3 gap-3 mobile:gap-2">
+                <div className="bg-slate-50 rounded-xl p-3 text-center mobile:px-1.5">
                   <p className="text-xs font-semibold text-slate-400 uppercase">Total dû</p>
-                  <p className="text-lg font-black text-slate-700">{formatCurrency(detailsStudent.totalAmountDue)}</p>
+                  <p className="text-lg font-black text-slate-700 mobile:text-base">{formatCurrency(detailsStudent.totalAmountDue)}</p>
                 </div>
-                <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                <div className="bg-emerald-50 rounded-xl p-3 text-center mobile:px-1.5">
                   <p className="text-xs font-semibold text-emerald-500 uppercase">Payé</p>
-                  <p className="text-lg font-black text-emerald-600">{formatCurrency(detailsStudent.totalPaid)}</p>
+                  <p className="text-lg font-black text-emerald-600 mobile:text-base">{formatCurrency(detailsStudent.totalPaid)}</p>
                 </div>
-                <div className={`rounded-xl p-3 text-center ${detailsStudent.remaining <= 0 ? 'bg-emerald-50' : 'bg-orange-50'}`}>
+                <div className={`rounded-xl p-3 text-center mobile:px-1.5 ${detailsStudent.remaining <= 0 ? 'bg-emerald-50' : 'bg-orange-50'}`}>
                   <p className={`text-xs font-semibold uppercase ${detailsStudent.remaining <= 0 ? 'text-emerald-500' : 'text-orange-400'}`}>Reste</p>
-                  <p className={`text-lg font-black ${detailsStudent.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>{formatCurrency(detailsStudent.remaining)}</p>
+                  <p className={`text-lg font-black mobile:text-base ${detailsStudent.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>{formatCurrency(detailsStudent.remaining)}</p>
                 </div>
               </div>
 
@@ -473,24 +608,24 @@ export default function Students() {
                 )}
               </div>
 
-              <div className="flex justify-end gap-3 pt-1">
+              <div className="flex justify-end gap-3 pt-1 mobile:grid mobile:grid-cols-2 mobile:gap-2">
                 <button
                   onClick={() => { setDetailsStudent(null); openEdit(detailsStudent); }}
-                  className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors mobile:order-2 mobile:min-h-[48px] mobile:rounded-xl mobile:bg-primary mobile:text-white mobile:text-[15px]"
                 >
                   Modifier la fiche
                 </button>
                 <button
                   onClick={() => setDetailsStudent(null)}
-                  className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors mobile:min-h-[48px] mobile:rounded-xl mobile:bg-slate-100 mobile:text-[15px] mobile:font-semibold"
                 >
                   Fermer
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Sheet>
     </div>
   );
 }

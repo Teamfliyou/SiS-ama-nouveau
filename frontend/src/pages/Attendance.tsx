@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ClipboardList, CheckCircle2, XCircle, Clock, Save, ChevronDown, Calendar } from 'lucide-react';
-import { authFetch, safeJson } from '../utils/api';
+import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
+import { toast } from '../utils/toast';
+import { useIsMobile } from '../hooks/useIsMobile';
+import ActionMenu from '../components/mobile/ActionMenu';
+import { mList, mInput, mPrimaryBtn } from '../components/mobile/styles';
 
 type Student = { id: number; firstName: string; lastName: string; classId: number };
 type ClassItem = { id: number; name: string; _count: { students: number } };
@@ -22,6 +26,7 @@ export default function Attendance() {
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     authFetch('/api/classes')
@@ -76,11 +81,13 @@ export default function Attendance() {
         classId: parseInt(selectedClass),
         status: statuses[s.id] || 'PRESENT'
       }));
-      await authFetch('/api/attendance', {
+      await safeJson(await authFetch('/api/attendance', {
         method: 'POST',
         body: JSON.stringify({ date, records })
-      });
+      }));
       setSaved(true);
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
     } finally { setSaving(false); }
   };
 
@@ -91,6 +98,107 @@ export default function Attendance() {
   };
 
   const selectedClassName = classes.find(c => c.id === parseInt(selectedClass))?.name || '';
+  const dateLabel = date === today() ? "Aujourd'hui" : new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // ── Téléphone ──
+  if (isMobile) {
+    return (
+      <div className="space-y-4">
+        {/* Classe + date */}
+        <div className="space-y-2">
+          <div className="relative">
+            <select aria-label="Classe" value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className={`${mInput} appearance-none pr-10 font-medium`}>
+              <option value="">Choisir une classe</option>
+              {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c._count.students})</option>)}
+            </select>
+            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          </div>
+          <div className="flex gap-2">
+            <input type="date" aria-label="Date" value={date} onChange={e => setDate(e.target.value)} className={`${mInput} flex-1 min-w-0`} />
+            <button type="button" onClick={() => setDate(today())}
+              className={`h-11 px-4 shrink-0 rounded-xl text-[15px] font-semibold ${date === today() ? 'bg-blue-50 text-primary' : 'bg-white/90 border border-slate-200/80 text-slate-600'}`}>
+              Aujourd'hui
+            </button>
+          </div>
+        </div>
+
+        {selectedClass && students.length > 0 && (
+          <>
+            {/* Résumé compact */}
+            <div className="glass-surface rounded-2xl grid grid-cols-3 divide-x divide-slate-100 py-2.5">
+              {(['PRESENT', 'ABSENT', 'LATE'] as const).map(st => (
+                <div key={st} className="text-center">
+                  <p className={`text-[20px] font-bold leading-tight ${st === 'PRESENT' ? 'text-emerald-600' : st === 'ABSENT' ? 'text-red-600' : 'text-amber-600'}`}>{counts[st]}</p>
+                  <p className="text-[12px] font-medium text-slate-500">{STATUS_CONFIG[st].label}{counts[st] > 1 ? 's' : ''}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pl-1">
+              <p className="min-w-0 truncate text-[15px] font-semibold text-slate-800 first-letter:uppercase">{selectedClassName} · {dateLabel}</p>
+              <ActionMenu
+                label="Actions groupées"
+                actions={[
+                  { label: 'Tout le monde présent', icon: CheckCircle2, onClick: () => setAll('PRESENT') },
+                  { label: 'Tout le monde absent', icon: XCircle, onClick: () => setAll('ABSENT') },
+                ]}
+              />
+            </div>
+
+            <ul className={mList}>
+              {students.map(student => {
+                const status = statuses[student.id] || 'PRESENT';
+                return (
+                  <li key={student.id} className="flex items-center gap-2 pl-4 pr-2 min-h-[60px]">
+                    <p className="flex-1 min-w-0 py-2 leading-tight">
+                      <span className="block truncate text-[15px] font-semibold text-slate-800">{student.firstName}</span>
+                      <span className="block truncate text-[13px] uppercase text-slate-500">{student.lastName}</span>
+                    </p>
+                    <div className="flex shrink-0 rounded-xl bg-slate-100/80 p-0.5" role="group" aria-label={`Statut de ${student.firstName}`}>
+                      {(['PRESENT', 'ABSENT', 'LATE'] as const).map(st => {
+                        const cfg = STATUS_CONFIG[st];
+                        const Icon = cfg.icon;
+                        const active = status === st;
+                        return (
+                          <button key={st} type="button" onClick={() => setStatus(student.id, st)} aria-label={cfg.label} aria-pressed={active}
+                            className={`h-11 w-11 flex items-center justify-center rounded-[10px] transition-colors ${active ? cfg.color.replace(/border-\S+/, '') : 'text-slate-400'}`}>
+                            <Icon className="w-5 h-5" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Enregistrer : toujours à portée de pouce, au-dessus de la barre du bas */}
+            <div className="h-16" aria-hidden />
+            <div className="fixed z-20 left-4 right-4 bottom-[calc(var(--m-tabbar-h)+max(8px,var(--safe-bottom))+10px)]">
+              <button onClick={handleSave} disabled={saving || saved}
+                className={`${mPrimaryBtn} shadow-lg ${saved ? '!bg-emerald-500 !shadow-emerald-500/25' : ''} disabled:!opacity-100`}>
+                {saved ? <><CheckCircle2 className="w-5 h-5"/> Appel enregistré</> : saving ? 'Enregistrement…' : <><Save className="w-5 h-5"/> Enregistrer l'appel</>}
+              </button>
+            </div>
+          </>
+        )}
+
+        {selectedClass && students.length === 0 && (
+          <div className="glass-surface rounded-2xl px-6 py-12 text-center">
+            <ClipboardList className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+            <p className="text-[15px] font-medium text-slate-500">Aucun élève dans cette classe.</p>
+          </div>
+        )}
+
+        {!selectedClass && (
+          <div className="glass-surface rounded-2xl px-6 py-12 text-center">
+            <ClipboardList className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+            <p className="text-[15px] font-medium text-slate-500">Choisissez une classe pour commencer l'appel.</p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -203,7 +311,7 @@ export default function Attendance() {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
               <p className="font-bold text-slate-800">
-                {selectedClassName} — {date === today() ? "Aujourd'hui" : new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                {selectedClassName} — {dateLabel}
               </p>
             </div>
             <ul className="divide-y divide-slate-100">

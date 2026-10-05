@@ -2,11 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Users, BookOpen, GraduationCap, TrendingUp,
   KeyRound, UserPlus, Download, UploadCloud,
-  Eye, EyeOff, CheckCircle2, AlertTriangle, RefreshCw, Settings
+  Eye, EyeOff, CheckCircle2, AlertTriangle, RefreshCw, Settings,
+  ClipboardList, CreditCard, Printer, ChevronRight
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, firstNameFromEmail } from '../utils/format';
+import { useIsMobile } from '../hooks/useIsMobile';
+import { mList, mSectionTitle } from '../components/mobile/styles';
 
 type Stats = { studentsCount: number; classesCount: number; teachersCount: number; totalPayments: number };
 type ImportResult = { classesCreated: number; studentsCreated: number; teachersCreated: number; paymentsCreated: number; attendancesCreated: number };
@@ -14,6 +17,7 @@ type ImportResult = { classesCreated: number; studentsCreated: number; teachersC
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats>({ studentsCount: 0, classesCount: 0, teachersCount: 0, totalPayments: 0 });
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const isAdmin = localStorage.getItem('role') === 'ADMIN';
 
   // Password change
@@ -129,6 +133,123 @@ export default function Dashboard() {
       if (importRef.current) importRef.current.value = '';
     }
   };
+
+  const importInput = <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImportFile}/>;
+
+  // ── Téléphone : une carte principale, quelques indicateurs, puis une liste ──
+  if (isMobile) {
+    const firstName = firstNameFromEmail(localStorage.getItem('user'));
+    const indicators = [
+      { label: 'Élèves',  value: stats.studentsCount, link: '/students' },
+      { label: 'Classes', value: stats.classesCount,  link: '/classes' },
+      { label: 'Profs',   value: stats.teachersCount, link: '/teachers' },
+    ];
+    const shortcuts = [
+      { label: 'Inscrire un élève',   sub: 'Nouvelle inscription',        icon: UserPlus,    tint: 'bg-blue-50 text-primary',       onClick: () => navigate('/students', { state: { openForm: true } }) },
+      { label: 'Encaisser un paiement', sub: 'Espèces, virement, chèque…', icon: CreditCard,  tint: 'bg-emerald-50 text-emerald-600', onClick: () => navigate('/finances', { state: { openForm: true } }) },
+      { label: "Feuilles d'appel",    sub: 'Imprimer pour une classe',    icon: Printer,     tint: 'bg-violet-50 text-violet-600',  onClick: () => navigate('/attendance-sheets') },
+    ];
+    const rowCls = 'w-full flex items-center gap-3 px-4 py-3 min-h-[60px] text-left active:bg-slate-50';
+
+    return (
+      <div className="space-y-6">
+        {importInput}
+        <div className="px-1">
+          <p className="text-[13px] text-slate-500 first-letter:uppercase">
+            {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+          <h2 className="text-[22px] font-bold text-slate-900 leading-tight truncate">Bonjour{firstName ? `, ${firstName}` : ''}</h2>
+        </div>
+
+        {/* Carte principale */}
+        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary to-blue-600 p-5 text-white shadow-lg shadow-primary/25">
+          <div className="pointer-events-none absolute -top-16 -right-10 h-40 w-40 rounded-full bg-white/15" aria-hidden />
+          <p className="relative text-[13px] font-medium text-blue-100">Paiements encaissés</p>
+          <p className="relative mt-1 text-[32px] font-bold leading-none tracking-tight">{formatCurrency(stats.totalPayments)}</p>
+          <p className="relative mt-2 text-[13px] text-blue-100">{stats.studentsCount} élève{stats.studentsCount > 1 ? 's' : ''} inscrit{stats.studentsCount > 1 ? 's' : ''}</p>
+          <div className="relative mt-5 grid grid-cols-2 gap-2">
+            <button onClick={() => navigate('/attendance')}
+              className="min-h-[44px] flex items-center justify-center gap-2 rounded-xl bg-white text-primary text-[15px] font-semibold active:bg-blue-50">
+              <ClipboardList className="w-4 h-4" /> Faire l'appel
+            </button>
+            <button onClick={() => navigate('/finances')}
+              className="min-h-[44px] flex items-center justify-center gap-2 rounded-xl bg-white/20 border border-white/25 text-white text-[15px] font-semibold active:bg-white/30">
+              <TrendingUp className="w-4 h-4" /> Finances
+            </button>
+          </div>
+        </section>
+
+        {/* Indicateurs compacts */}
+        <section className="glass-surface rounded-2xl grid grid-cols-3 divide-x divide-slate-100">
+          {indicators.map(item => (
+            <Link key={item.label} to={item.link} className="py-3 text-center active:bg-slate-50 first:rounded-l-2xl last:rounded-r-2xl">
+              <p className="text-[22px] font-bold text-slate-900 leading-tight">{item.value}</p>
+              <p className="text-[12px] font-medium text-slate-500">{item.label}</p>
+            </Link>
+          ))}
+        </section>
+
+        {/* Accès rapide */}
+        <section>
+          <h3 className={mSectionTitle}>Accès rapide</h3>
+          <ul className={mList}>
+            {shortcuts.map(sc => (
+              <li key={sc.label}>
+                <button onClick={sc.onClick} className={rowCls}>
+                  <span className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center ${sc.tint}`}><sc.icon className="w-5 h-5" /></span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[15px] font-semibold text-slate-800">{sc.label}</span>
+                    <span className="block text-[13px] text-slate-500 truncate">{sc.sub}</span>
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* Données (secondaire) */}
+        <section>
+          <h3 className={mSectionTitle}>Sauvegarde des données</h3>
+          <ul className={mList}>
+            <li>
+              <button onClick={handleExport} disabled={exporting} className={`${rowCls} disabled:opacity-60`}>
+                <span className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center bg-slate-100 text-slate-600">
+                  {exporting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[15px] font-semibold text-slate-800">Exporter</span>
+                  <span className="block text-[13px] text-slate-500 truncate">Sauvegarde complète (JSON)</span>
+                </span>
+              </button>
+            </li>
+            <li>
+              <button onClick={() => importRef.current?.click()} disabled={importing} className={`${rowCls} disabled:opacity-60`}>
+                <span className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center bg-slate-100 text-slate-600">
+                  {importing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <UploadCloud className="w-5 h-5" />}
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[15px] font-semibold text-slate-800">Restaurer</span>
+                  <span className="block text-[13px] text-slate-500 truncate">Depuis un fichier d'export</span>
+                </span>
+              </button>
+            </li>
+          </ul>
+          {importResult && (
+            <p className="mt-2 text-[13px] text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl flex items-start gap-1.5">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>
+              {importResult.classesCreated} classes · {importResult.studentsCreated} élèves · {importResult.teachersCreated} profs · {importResult.paymentsCreated} paiements · {importResult.attendancesCreated} présences importés
+            </p>
+          )}
+          {importError && (
+            <p className="mt-2 text-[13px] text-red-600 bg-red-50 px-3 py-2 rounded-xl flex items-start gap-1.5">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/> {importError}
+            </p>
+          )}
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -318,7 +439,7 @@ export default function Dashboard() {
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-slate-800">Importer des données</p>
               <p className="text-xs text-slate-400 mt-0.5 mb-3">Restaurer depuis un fichier d'export JSON (fusion, sans doublon)</p>
-              <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImportFile}/>
+              {importInput}
               <button onClick={() => importRef.current?.click()} disabled={importing}
                 className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-all disabled:opacity-60">
                 {importing ? <><RefreshCw className="w-3.5 h-3.5 animate-spin"/> Import...</> : <><UploadCloud className="w-3.5 h-3.5"/> Choisir un fichier</>}

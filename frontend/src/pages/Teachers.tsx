@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { GraduationCap, Plus, Pencil, Trash2, X, Save, Mail, Phone, BookOpen, Eye, Loader2 } from 'lucide-react';
 import { authFetch, safeJson } from '../utils/api';
 import { toast } from '../utils/toast';
+import { useIsMobile } from '../hooks/useIsMobile';
+import Sheet from '../components/mobile/Sheet';
+import ActionMenu from '../components/mobile/ActionMenu';
+import { mList } from '../components/mobile/styles';
 
 type Teacher = {
   id: number; firstName: string; lastName: string;
@@ -39,6 +43,7 @@ export default function Teachers() {
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [detailTeacher, setDetailTeacher] = useState<Teacher | null>(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     fetchTeachers();
@@ -104,8 +109,113 @@ export default function Teachers() {
     }
   };
 
+  const teacherForm = (
+    <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mobile:grid-cols-1 mobile:px-5">
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Prénom <span className="text-red-500">*</span></label>
+        <input type="text" required value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))}
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary mobile:rounded-xl" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Nom <span className="text-red-500">*</span></label>
+        <input type="text" required value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))}
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary mobile:rounded-xl" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Matière</label>
+        <input type="text" list="subjects" value={form.subject} onChange={e => setForm(f => ({...f, subject: e.target.value}))}
+          placeholder="ex: Mathématiques"
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary mobile:rounded-xl" />
+        <datalist id="subjects">
+          {Object.keys(SUBJECT_COLORS).map(s => <option key={s} value={s} />)}
+        </datalist>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+        <input type="email" inputMode="email" autoComplete="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))}
+          placeholder="prof@exemple.com"
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary mobile:rounded-xl" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Téléphone</label>
+        <input type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))}
+          placeholder="+33 6 00 00 00 00"
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary mobile:rounded-xl" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Classe assignée</label>
+        <select value={form.classId} onChange={e => setForm(f => ({...f, classId: e.target.value}))}
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary mobile:rounded-xl bg-white">
+          <option value="">Aucune</option>
+          {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+      {error && <p className="mobile:col-span-1 sm:col-span-2 lg:col-span-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+      <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-3 pt-1 mobile:col-span-1 mobile:grid mobile:grid-cols-2 mobile:gap-2">
+        <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg mobile:min-h-[48px] mobile:rounded-xl mobile:bg-slate-100 mobile:text-[15px] mobile:font-semibold">Annuler</button>
+        <button type="submit" disabled={loading}
+          className={`flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg transition-all disabled:opacity-60 mobile:min-h-[48px] mobile:justify-center mobile:rounded-xl mobile:text-[15px] ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-blue-600'}`}>
+          {editingId ? <><Save className="w-4 h-4"/> Sauvegarder</> : <><Plus className="w-4 h-4"/> Ajouter</>}
+        </button>
+      </div>
+    </form>
+  );
+
+  // ── Téléphone ──
+  const mobileView = (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="px-1 text-[13px] font-medium text-slate-500">{teachers.length} professeur{teachers.length > 1 ? 's' : ''}</p>
+        <button type="button" onClick={openCreate}
+          className="h-11 px-4 flex items-center gap-1.5 rounded-xl bg-primary text-white text-[15px] font-semibold shadow-sm shadow-primary/25 active:bg-blue-600">
+          <Plus className="w-5 h-5" /> Ajouter
+        </button>
+      </div>
+
+      {teachers.length === 0 ? (
+        <div className="glass-surface rounded-2xl px-6 py-12 text-center">
+          <GraduationCap className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+          <p className="text-[15px] font-medium text-slate-500">Aucun professeur enregistré.</p>
+        </div>
+      ) : (
+        <ul className={mList}>
+          {teachers.map(t => (
+            <li key={t.id} className="flex items-center gap-3 pl-4 pr-3 min-h-[64px]">
+              <button type="button" onClick={() => setDetailTeacher(t)} className="flex-1 min-w-0 flex items-center gap-3 py-3 text-left">
+                <span className={`h-10 w-10 shrink-0 rounded-xl bg-gradient-to-tr ${avatarColor(t.lastName)} text-white flex items-center justify-center font-bold text-xs`}>
+                  {`${t.firstName[0]}${t.lastName[0]}`.toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold text-slate-900 truncate">{t.firstName} <span className="uppercase">{t.lastName}</span></span>
+                  <span className="block text-[13px] text-slate-500 truncate">
+                    {[t.subject, t.class?.name].filter(Boolean).join(' · ') || 'Aucune affectation'}
+                  </span>
+                </span>
+              </button>
+              <ActionMenu
+                title={`${t.firstName} ${t.lastName.toUpperCase()}`}
+                actions={[
+                  { label: 'Consulter la fiche', icon: Eye, onClick: () => setDetailTeacher(t) },
+                  ...(t.phone ? [{ label: 'Appeler', icon: Phone, onClick: () => { window.location.href = `tel:${t.phone!.replace(/\s/g, '')}`; } }] : []),
+                  ...(t.email ? [{ label: 'Envoyer un email', icon: Mail, onClick: () => { window.location.href = `mailto:${t.email}`; } }] : []),
+                  { label: 'Modifier', icon: Pencil, onClick: () => openEdit(t) },
+                  { label: 'Supprimer', icon: Trash2, onClick: () => handleDelete(t), danger: true, disabled: deletingId === t.id },
+                ]}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <Sheet open={showForm} onClose={() => setShowForm(false)} title={editingId ? 'Modifier le professeur' : 'Nouveau professeur'}>
+        {teacherForm}
+      </Sheet>
+    </div>
+  );
+
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {isMobile ? mobileView : (<>
       {/* Header */}
       <div className="flex items-end justify-between">
         <div>
@@ -129,55 +239,7 @@ export default function Teachers() {
             </h3>
             <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5"/></button>
           </div>
-          <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Prénom <span className="text-red-500">*</span></label>
-              <input type="text" required value={form.firstName} onChange={e => setForm(f => ({...f, firstName: e.target.value}))}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Nom <span className="text-red-500">*</span></label>
-              <input type="text" required value={form.lastName} onChange={e => setForm(f => ({...f, lastName: e.target.value}))}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Matière</label>
-              <input type="text" list="subjects" value={form.subject} onChange={e => setForm(f => ({...f, subject: e.target.value}))}
-                placeholder="ex: Mathématiques"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary" />
-              <datalist id="subjects">
-                {Object.keys(SUBJECT_COLORS).map(s => <option key={s} value={s} />)}
-              </datalist>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-              <input type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))}
-                placeholder="prof@exemple.com"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Téléphone</label>
-              <input type="tel" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))}
-                placeholder="+33 6 00 00 00 00"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Classe assignée</label>
-              <select value={form.classId} onChange={e => setForm(f => ({...f, classId: e.target.value}))}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary bg-white">
-                <option value="">Aucune</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            {error && <p className="sm:col-span-2 lg:col-span-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-            <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-3 pt-1">
-              <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Annuler</button>
-              <button type="submit" disabled={loading}
-                className={`flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg transition-all disabled:opacity-60 ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-blue-600'}`}>
-                {editingId ? <><Save className="w-4 h-4"/> Sauvegarder</> : <><Plus className="w-4 h-4"/> Ajouter</>}
-              </button>
-            </div>
-          </form>
+          {teacherForm}
         </div>
       )}
 
@@ -263,11 +325,13 @@ export default function Teachers() {
         </div>
       )}
 
+      </>)}
+
       {/* ── Teacher details modal ── */}
-      {detailTeacher && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => setDetailTeacher(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-start p-6 border-b border-slate-100">
+      <Sheet open={!!detailTeacher} onClose={() => setDetailTeacher(null)}>
+        {detailTeacher && (
+          <>
+            <div className="flex justify-between items-start p-6 border-b border-slate-100 mobile:px-5 mobile:pt-1 mobile:pb-4">
               <div className="flex items-center gap-4">
                 <div className={`h-12 w-12 rounded-xl bg-gradient-to-tr ${avatarColor(detailTeacher.lastName)} text-white flex items-center justify-center font-bold text-sm shadow-sm`}>
                   {`${detailTeacher.firstName[0]}${detailTeacher.lastName[0]}`.toUpperCase()}
@@ -281,12 +345,12 @@ export default function Teachers() {
                   </p>
                 </div>
               </div>
-              <button onClick={() => setDetailTeacher(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setDetailTeacher(null)} aria-label="Fermer" className="text-slate-400 hover:text-slate-600 mobile:hidden">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-3">
+            <div className="p-6 space-y-3 mobile:px-5 mobile:pt-4 mobile:pb-0">
               {detailTeacher.subject && (
                 <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                   <BookOpen className="w-4 h-4 text-slate-400" />
@@ -307,35 +371,35 @@ export default function Teachers() {
                 <Mail className="w-4 h-4 text-slate-400" />
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-slate-400 uppercase">Email</p>
-                  <p className="text-sm font-semibold text-slate-700 truncate">{detailTeacher.email || 'Non renseigné'}</p>
+                  <p className="text-sm font-semibold text-slate-700 truncate">{detailTeacher.email ? <a href={`mailto:${detailTeacher.email}`} className="mobile:text-primary">{detailTeacher.email}</a> : 'Non renseigné'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                 <Phone className="w-4 h-4 text-slate-400" />
                 <div>
                   <p className="text-xs font-semibold text-slate-400 uppercase">Téléphone</p>
-                  <p className="text-sm font-semibold text-slate-700">{detailTeacher.phone || 'Non renseigné'}</p>
+                  <p className="text-sm font-semibold text-slate-700">{detailTeacher.phone ? <a href={`tel:${detailTeacher.phone.replace(/\s/g, '')}`} className="mobile:text-primary">{detailTeacher.phone}</a> : 'Non renseigné'}</p>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex justify-end gap-3 pt-2 mobile:grid mobile:grid-cols-2 mobile:gap-2">
                 <button
                   onClick={() => { setDetailTeacher(null); openEdit(detailTeacher); }}
-                  className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors mobile:order-2 mobile:min-h-[48px] mobile:rounded-xl mobile:bg-primary mobile:text-white mobile:text-[15px]"
                 >
                   Modifier la fiche
                 </button>
                 <button
                   onClick={() => setDetailTeacher(null)}
-                  className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors mobile:min-h-[48px] mobile:rounded-xl mobile:bg-slate-100 mobile:text-[15px] mobile:font-semibold"
                 >
                   Fermer
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Sheet>
     </div>
   );
 }
