@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, studentCreateSchema, parseId } from '../lib/validate';
 import { centsToEuros } from '../lib/money';
+import { studentBalance } from '../lib/billing';
 
 const router = Router();
 
@@ -17,13 +18,18 @@ type StudentRow = {
   classId: number | null;
   createdAt: Date;
   class: { id: number; name: string; tuitionFeeCents: number } | null;
-  payments: { id: number; amountCents: number; date: Date; method: string | null }[];
+  payments: {
+    id: number;
+    amountCents: number;
+    discountCents: number;
+    date: Date;
+    method: string | null;
+    groupId: number | null;
+  }[];
 };
 
 const mapStudent = (s: StudentRow) => {
-  const totalPaidCents = s.payments.reduce((acc, p) => acc + p.amountCents, 0);
-  const totalAmountDueCents = s.class?.tuitionFeeCents ?? 0;
-  const remainingCents = totalAmountDueCents - totalPaidCents;
+  const { totalPaidCents, totalAmountDueCents, totalDiscountCents, remainingCents } = studentBalance(s);
   return {
     id: s.id,
     firstName: s.firstName,
@@ -38,14 +44,19 @@ const mapStudent = (s: StudentRow) => {
       id: p.id,
       amountCents: p.amountCents,
       amount: centsToEuros(p.amountCents),
+      discountCents: p.discountCents,
+      discount: centsToEuros(p.discountCents),
       date: p.date,
       method: p.method,
+      groupId: p.groupId,
     })),
     // Exact integer-cents computations; euros are derived for display only.
     totalPaidCents,
     totalAmountDueCents,
+    totalDiscountCents,
     remainingCents,
     totalPaid: centsToEuros(totalPaidCents),
+    totalDiscount: centsToEuros(totalDiscountCents),
     totalAmountDue: centsToEuros(totalAmountDueCents),
     remaining: centsToEuros(remainingCents),
   };

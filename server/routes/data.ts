@@ -106,8 +106,23 @@ const importPayloadSchema = z.object({
         method: optionalString.transform((v) => v || 'Espèces'),
         amount: euroNumber,
         amountCents: centsNumber,
+        discountCents: centsNumber,
+        groupId: z.number().int().nullable().optional(),
         date: paymentDateSchema,
         student: z.object({ id: z.number().int() }).optional(),
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
+  paymentGroups: z
+    .array(
+      z.object({
+        id: z.number().int(),
+        method: optionalString.transform((v) => v || 'Espèces'),
+        subtotalCents: z.number().int().nonnegative().max(MAX_CENTS),
+        discountCents: z.number().int().nonnegative().max(MAX_CENTS),
+        totalCents: z.number().int().nonnegative().max(MAX_CENTS),
+        date: paymentDateSchema,
       })
     )
     .max(MAX_ITEMS)
@@ -133,11 +148,12 @@ router.get(
   authenticate,
   requireAdmin,
   asyncHandler(async (_req, res) => {
-    const [classes, students, teachers, payments, attendances] = await Promise.all([
+    const [classes, students, teachers, payments, paymentGroups, attendances] = await Promise.all([
       prisma.class.findMany({ orderBy: { name: 'asc' } }),
       prisma.student.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } }),
       prisma.teacher.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } }),
       prisma.payment.findMany({ include: { student: true }, orderBy: { date: 'desc' } }),
+      prisma.paymentGroup.findMany({ orderBy: { date: 'desc' } }),
       prisma.attendance.findMany({ include: { student: true, class: true }, orderBy: { date: 'desc' } }),
     ]);
     res.setHeader(
@@ -151,6 +167,7 @@ router.get(
       students,
       teachers,
       payments,
+      paymentGroups,
       attendances,
     });
   })
@@ -171,6 +188,7 @@ router.post(
       students = [],
       teachers = [],
       payments = [],
+      paymentGroups = [],
       attendances = [],
     } = payload;
 
@@ -219,6 +237,29 @@ router.post(
 
       const seenClasses = new Set(classMap.keys());
       const seenTeachers = new Set(teachersByKey);
+
+      // Grouped payments: a group is recreated lazily, the first time one of its
+      // lines is actually imported, so a re-import never duplicates groups.
+      const groupsById = new Map(paymentGroups.map((g) => [g.id, g]));
+      const groupMap = new Map<number, number>(); // original group id -> created id
+      const resolveGroupId = async (originalId: number | null | undefined): Promise<number | null> => {
+        if (originalId === null || originalId === undefined) return null;
+        const created = groupMap.get(originalId);
+        if (created !== undefined) return created;
+        const g = groupsById.get(originalId);
+        if (!g) return null;
+        const row = await tx.paymentGroup.create({
+          data: {
+            method: g.method,
+            subtotalCents: g.subtotalCents,
+            discountCents: g.discountCents,
+            totalCents: g.totalCents,
+            date: g.date ? new Date(g.date) : new Date(),
+          },
+        });
+        groupMap.set(originalId, row.id);
+        return row.id;
+      };
 
       const resolveClassId = (className?: string): number | null =>
         className ? classMap.get(normalizeKey(className)) ?? null : null;
@@ -294,9 +335,11 @@ router.post(
         await tx.payment.create({
           data: {
             amountCents,
+            discountCents: p.discountCents ?? 0,
             method: p.method ?? 'Espèces',
             studentId: newStudentId,
             date,
+            groupId: await resolveGroupId(p.groupId),
           },
         });
         paymentsCreated++;
