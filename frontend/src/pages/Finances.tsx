@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { CreditCard, Plus, Pencil, Trash2, X, Save, AlertCircle, CheckCircle2, Filter } from 'lucide-react';
 import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
 import { formatCurrency } from '../utils/format';
 import { toast } from '../utils/toast';
+import { useIsMobile } from '../hooks/useIsMobile';
+import Sheet from '../components/mobile/Sheet';
+import ActionMenu from '../components/mobile/ActionMenu';
+import { mList, mInput, mPrimaryBtn } from '../components/mobile/styles';
 
 type Payment = {
   id: number;
@@ -31,11 +36,22 @@ export default function Finances() {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Espèces');
 
+  // Mobile : formulaire en bottom sheet
+  const isMobile = useIsMobile();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [formOpen, setFormOpen] = useState(() => !!(location.state as { openForm?: boolean } | null)?.openForm);
+
   useEffect(() => {
     fetchPayments();
     fetchStudents();
     fetchClasses();
   }, []);
+
+  // Consomme l'intention « ouvrir le formulaire » venant du tableau de bord.
+  useEffect(() => {
+    if ((location.state as { openForm?: boolean } | null)?.openForm) navigate(location.pathname, { replace: true, state: null });
+  }, [location, navigate]);
 
   const fetchPayments = async () => {
     try {
@@ -113,6 +129,7 @@ export default function Finances() {
     setStudentId(pay.studentId.toString());
     setAmount(pay.amount.toString());
     setMethod(pay.method);
+    setFormOpen(true);
   };
 
   const resetForm = () => {
@@ -121,45 +138,190 @@ export default function Finances() {
     setAmount('');
     setMethod('Espèces');
     setFormClassId('');
+    setFormOpen(false);
   };
+
+  const openCreate = () => { resetForm(); setFormOpen(true); };
+
+  const studentSummary = selectedStudent && (
+      <div className={`p-5 rounded-2xl border animate-in zoom-in-95 duration-200 ${selectedStudent.remaining <= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-blue-50 border-blue-100'}`}>
+         <h4 className="text-sm font-semibold text-slate-900 mb-4 flex items-center">
+           {selectedStudent.remaining <= 0 ? <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-500" /> : <CreditCard className="w-4 h-4 mr-2 text-blue-500" />}
+           Résumé : {selectedStudent.firstName}
+         </h4>
+         <div className="space-y-3">
+           <div className="flex justify-between text-xs">
+             <span className="text-slate-500">Total dû :</span>
+             <span className="font-bold text-slate-700">{formatCurrency(selectedStudent.totalAmountDue)}</span>
+           </div>
+           <div className="flex justify-between text-xs">
+             <span className="text-slate-500">Déjà payé :</span>
+             <span className="font-bold text-emerald-600">+{formatCurrency(selectedStudent.totalPaid)}</span>
+           </div>
+           <div className="pt-2 border-t border-blue-200 flex justify-between items-center">
+             <span className="text-xs font-bold text-slate-700">Reste à payer :</span>
+             <span className={`text-sm font-black ${selectedStudent.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>
+               {formatCurrency(selectedStudent.remaining)}
+             </span>
+           </div>
+         </div>
+      </div>
+    );
+
+  const paymentForm = (
+    <form onSubmit={handleSave} className="space-y-4 mobile:px-5">
+      {!editingId && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Filtrer par classe</label>
+            <select
+              className="mt-1 block w-full px-3 py-2 border border-slate-200 rounded-lg shadow-sm mobile:rounded-xl bg-slate-50 focus:ring-2 focus:ring-primary"
+              value={formClassId} onChange={e => { setFormClassId(e.target.value); setStudentId(''); }}
+            >
+              <option value="">-- Toutes les classes --</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Élève</label>
+            <select
+              required
+              className="mt-1 block w-full px-3 py-2 border border-slate-200 rounded-lg shadow-sm mobile:rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent bg-slate-50"
+              value={studentId} onChange={e => setStudentId(e.target.value)}
+            >
+              <option value="">-- Choisir un élève --</option>
+              {studentsForForm.map(st => (
+                <option key={st.id} value={st.id}>
+                  {st.firstName} {st.lastName} ({st.class?.name || 'Sans classe'})
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
+      {editingId && (
+         <div className="p-2 bg-white/50 border border-amber-200 rounded-md mb-2">
+            <p className="text-xs font-medium text-amber-700">Modification pour : {selectedStudent?.firstName} {selectedStudent?.lastName}</p>
+         </div>
+      )}
+      
+      <div>
+        <label className="block text-sm font-medium text-slate-700">Montant (€)</label>
+        <div className="relative mt-1">
+          <input 
+            type="number" required step="0.01" inputMode="decimal"
+            className="block w-full px-3 py-2 pl-9 border border-slate-200 rounded-lg shadow-sm mobile:rounded-xl focus:ring-2 focus:ring-primary transition-all"
+            value={amount} onChange={e => setAmount(e.target.value)}
+          />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">€</span>
+        </div>
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-slate-700">Méthode</label>
+        <select 
+          className="mt-1 block w-full px-3 py-2 border border-slate-200 rounded-lg shadow-sm mobile:rounded-xl bg-white"
+          value={method} onChange={e => setMethod(e.target.value)}
+        >
+          <option>Espèces</option>
+          <option>Virement</option>
+          <option>Chèque</option>
+          <option>Mobile Money</option>
+        </select>
+      </div>
+      
+      <button 
+        type="submit" disabled={loading}
+        className={`w-full flex items-center justify-center py-2.5 shadow-sm rounded-lg text-sm font-bold text-white transition-all mobile:min-h-[48px] mobile:rounded-xl mobile:text-[15px] ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-blue-600'}`}
+       >
+         {editingId ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+         {editingId ? 'Enregistrer les changements' : 'Valider ce paiement'}
+      </button>
+    </form>
+  );
+
+  // ── Téléphone ──
+  const formatShortDate = (d: string) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  const filteredTotal = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
+
+  const mobileView = (
+    <div className="space-y-5">
+      <button type="button" onClick={openCreate} className={mPrimaryBtn}>
+        <Plus className="w-5 h-5" /> Nouveau paiement
+      </button>
+
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0 px-1">
+            <h3 className="text-[15px] font-semibold text-slate-800">Historique</h3>
+            <p className="text-[13px] text-slate-500 truncate">{filteredPayments.length} · <span className="font-medium text-emerald-600">{formatCurrency(filteredTotal)}</span></p>
+          </div>
+          <div className="relative w-[136px] shrink-0">
+            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <select aria-label="Filtrer par classe" value={filterClassId} onChange={e => setFilterClassId(e.target.value)} className={`${mInput} pl-9 pr-2 truncate`}>
+              <option value="">Toutes</option>
+              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {filteredPayments.length === 0 ? (
+          <div className="glass-surface rounded-2xl px-6 py-12 text-center">
+            <AlertCircle className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+            <p className="text-[15px] font-medium text-slate-500">Aucune transaction.</p>
+          </div>
+        ) : (
+          <ul className={mList}>
+            {filteredPayments.map(pay => (
+              <li key={pay.id} className="flex items-center gap-3 pl-4 pr-3 min-h-[64px]">
+                <button type="button" onClick={() => openEdit(pay)} className="flex-1 min-w-0 flex items-center gap-3 py-3 text-left">
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline gap-2">
+                      <span className="flex-1 min-w-0 text-[15px] font-semibold text-slate-900 truncate">{pay.student.firstName} <span className="uppercase">{pay.student.lastName}</span></span>
+                      <span className="shrink-0 text-[15px] font-bold text-emerald-600">+{formatCurrency(pay.amount)}</span>
+                    </span>
+                    <span className="block text-[13px] text-slate-500 truncate">
+                      {formatShortDate(pay.date)}<span className="mx-1.5 text-slate-300">·</span>{pay.method}<span className="mx-1.5 text-slate-300">·</span>{pay.student.class?.name || 'Sans classe'}
+                    </span>
+                  </span>
+                </button>
+                <ActionMenu
+                  title={`${formatCurrency(pay.amount)} — ${pay.student.firstName} ${pay.student.lastName.toUpperCase()}`}
+                  actions={[
+                    { label: 'Corriger', icon: Pencil, onClick: () => openEdit(pay) },
+                    { label: 'Supprimer', icon: Trash2, onClick: () => handleDelete(pay.id), danger: true },
+                  ]}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <Sheet open={formOpen} onClose={resetForm} title={editingId ? 'Modifier le paiement' : 'Nouveau paiement'}>
+        {selectedStudent && <div className="px-5 pb-4">{studentSummary}</div>}
+        {paymentForm}
+      </Sheet>
+    </div>
+  );
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex justify-between items-end">
+      <div className="flex justify-between items-end mobile:hidden">
         <div>
           <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Finances & Paiements</h2>
           <p className="mt-2 text-sm text-slate-500">Gérez les historiques de paiements et les acomptes des étudiants.</p>
         </div>
       </div>
 
+      {isMobile ? mobileView : (
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Left Column: Form and Summary */}
         <div className="lg:col-span-1 space-y-6">
           {/* Summary Card */}
-          {selectedStudent && (
-            <div className={`p-5 rounded-2xl border animate-in zoom-in-95 duration-200 ${selectedStudent.remaining <= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-blue-50 border-blue-100'}`}>
-               <h4 className="text-sm font-semibold text-slate-900 mb-4 flex items-center">
-                 {selectedStudent.remaining <= 0 ? <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-500" /> : <CreditCard className="w-4 h-4 mr-2 text-blue-500" />}
-                 Résumé : {selectedStudent.firstName}
-               </h4>
-               <div className="space-y-3">
-                 <div className="flex justify-between text-xs">
-                   <span className="text-slate-500">Total dû :</span>
-                   <span className="font-bold text-slate-700">{formatCurrency(selectedStudent.totalAmountDue)}</span>
-                 </div>
-                 <div className="flex justify-between text-xs">
-                   <span className="text-slate-500">Déjà payé :</span>
-                   <span className="font-bold text-emerald-600">+{formatCurrency(selectedStudent.totalPaid)}</span>
-                 </div>
-                 <div className="pt-2 border-t border-blue-200 flex justify-between items-center">
-                   <span className="text-xs font-bold text-slate-700">Reste à payer :</span>
-                   <span className={`text-sm font-black ${selectedStudent.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>
-                     {formatCurrency(selectedStudent.remaining)}
-                   </span>
-                 </div>
-               </div>
-            </div>
-          )}
+          {studentSummary}
 
           {/* Payment Form */}
           <div className={`rounded-2xl shadow-sm border p-6 transition-all ${editingId ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100'}`}>
@@ -173,77 +335,7 @@ export default function Finances() {
                 </button>
               )}
             </div>
-            <form onSubmit={handleSave} className="space-y-4">
-              {!editingId && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700">Filtrer par classe</label>
-                    <select
-                      className="mt-1 block w-full px-3 py-2 border border-slate-200 rounded-lg shadow-sm bg-slate-50 focus:ring-2 focus:ring-primary"
-                      value={formClassId} onChange={e => { setFormClassId(e.target.value); setStudentId(''); }}
-                    >
-                      <option value="">-- Toutes les classes --</option>
-                      {classes.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700">Élève</label>
-                    <select
-                      required
-                      className="mt-1 block w-full px-3 py-2 border border-slate-200 rounded-lg shadow-sm focus:ring-2 focus:ring-primary focus:border-transparent bg-slate-50"
-                      value={studentId} onChange={e => setStudentId(e.target.value)}
-                    >
-                      <option value="">-- Choisir un élève --</option>
-                      {studentsForForm.map(st => (
-                        <option key={st.id} value={st.id}>
-                          {st.firstName} {st.lastName} ({st.class?.name || 'Sans classe'})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
-              {editingId && (
-                 <div className="p-2 bg-white/50 border border-amber-200 rounded-md mb-2">
-                    <p className="text-xs font-medium text-amber-700">Modification pour : {selectedStudent?.firstName} {selectedStudent?.lastName}</p>
-                 </div>
-              )}
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Montant (€)</label>
-                <div className="relative mt-1">
-                  <input 
-                    type="number" required step="0.01"
-                    className="block w-full px-3 py-2 pl-9 border border-slate-200 rounded-lg shadow-sm focus:ring-2 focus:ring-primary transition-all"
-                    value={amount} onChange={e => setAmount(e.target.value)}
-                  />
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">€</span>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Méthode</label>
-                <select 
-                  className="mt-1 block w-full px-3 py-2 border border-slate-200 rounded-lg shadow-sm bg-white"
-                  value={method} onChange={e => setMethod(e.target.value)}
-                >
-                  <option>Espèces</option>
-                  <option>Virement</option>
-                  <option>Chèque</option>
-                  <option>Mobile Money</option>
-                </select>
-              </div>
-              
-              <button 
-                type="submit" disabled={loading}
-                className={`w-full flex items-center justify-center py-2.5 shadow-sm rounded-lg text-sm font-bold text-white transition-all ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-blue-600'}`}
-               >
-                 {editingId ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                 {editingId ? 'Enregistrer les changements' : 'Valider ce paiement'}
-              </button>
-            </form>
+            {paymentForm}
           </div>
         </div>
 
@@ -325,6 +417,7 @@ export default function Finances() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

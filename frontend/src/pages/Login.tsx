@@ -49,7 +49,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-50 to-gray-50 p-4">
-      <div className="bg-white/80 backdrop-blur-md p-10 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full max-w-md border border-white/40">
+      <div className="bg-white/80 backdrop-blur-md p-10 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] w-full max-w-md border border-white/40 mobile:px-6 mobile:py-8 mobile:rounded-3xl">
         <div className="flex justify-center mb-6">
           <div className="bg-primary/10 text-primary p-3 rounded-xl">
              <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -58,15 +58,17 @@ export default function Login() {
             </svg>
           </div>
         </div>
-        <h2 className="text-3xl font-extrabold text-center text-slate-800 mb-2">ASSO AMA SIS</h2>
+        <h2 className="text-3xl font-extrabold text-center text-slate-800 mb-2 mobile:text-2xl">ASSO AMA SIS</h2>
         <p className="text-center text-slate-500 mb-8 text-sm">Gestion du Système d'Information Scolaire</p>
         
-        <form onSubmit={handleLogin} className="space-y-6">
+        <form onSubmit={handleLogin} className="space-y-6 mobile:space-y-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1">Email</label>
             <input 
               type="email" 
               required
+              inputMode="email"
+              autoComplete="username"
               className="mt-1 block w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition duration-200 placeholder:text-slate-400"
               placeholder="admin@example.com"
               value={email}
@@ -79,6 +81,7 @@ export default function Login() {
             <input 
               type="password" 
               required
+              autoComplete="current-password"
               className="mt-1 block w-full px-4 py-3 bg-white/50 border border-slate-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition duration-200 placeholder:text-slate-400"
               placeholder="••••••••"
               value={password}
