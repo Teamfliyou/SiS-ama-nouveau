@@ -38,12 +38,33 @@ model Student {
 }
 
 model Payment {
-  id          Int      @id @default(autoincrement())
-  amountCents Int
-  date        DateTime @default(now())
-  studentId   Int
-  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  method      String?  @default("Espèces")
+  id            Int           @id @default(autoincrement())
+  amountCents   Int
+  // Part of the family discount credited to this student (0 for an individual payment).
+  // The amount still due is tuition - amountCents - discountCents.
+  discountCents Int           @default(0)
+  date          DateTime      @default(now())
+  studentId     Int
+  student       Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  method        String?       @default("Espèces")
+  // Set when the payment line belongs to a multi-child (grouped) payment.
+  groupId       Int?
+  group         PaymentGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+}
+
+// One transaction settling several children at once. Each child keeps its own
+// Payment line (linked through groupId) so balances keep working per student.
+model PaymentGroup {
+  id            Int       @id @default(autoincrement())
+  date          DateTime  @default(now())
+  method        String?   @default("Espèces")
+  subtotalCents Int
+  discountCents Int
+  totalCents    Int
+  createdById   Int?
+  payments      Payment[]
 }
 
 model Teacher {

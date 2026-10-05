@@ -9,6 +9,7 @@
 - **Répertoire des Élèves** : Inscription, modification et suivi des élèves.
 - **Gestion des Professeurs** : Affectation aux classes et matières.
 - **Suivi Financier** : Gestion des paiements (acomptes, solde restant) avec historique complet.
+- **Paiement famille** : Plusieurs enfants réglés en une seule transaction, réduction famille de 10 % dès 2 enfants (montants et remise recalculés côté serveur à partir des frais de classe).
 - **Présences** : Pointage quotidien et historique par classe.
 - **Import CSV** : Import en masse des élèves depuis un fichier CSV.
 - **Dashboard Dynamique** : Vue d'ensemble en temps réel des indicateurs clés (élèves, classes, revenus).
@@ -30,6 +31,7 @@
 | Classes | `GET/POST /api/classes`, `PUT/DELETE /api/classes/:id` |
 | Présences | `GET/POST /api/attendance`, `GET /api/attendance/history` |
 | Finances | `GET/POST /api/finances`, `PUT/DELETE /api/finances/:id` |
+| Paiement groupé (plusieurs enfants) | `POST /api/finances/group`, `GET/DELETE /api/finances/groups/:id` |
 | Import CSV | `POST /api/import-csv/students`, `POST /api/import-csv/teachers` |
 | Sauvegardes | `GET /api/export`, `POST /api/import/full` |
 | Statistiques | `GET /api/stats` |

@@ -140,6 +140,19 @@ export const paymentCreateSchema = z.object({
   method: optionalTextField('La méthode', 50),
 });
 
+// Multi-child payment: the client only sends WHO is paid. Amounts are always
+// recomputed server-side from tuition fees; expectedTotalCents is only used to
+// reject the payment if what the user saw is no longer the real amount.
+export const paymentGroupCreateSchema = z.object({
+  studentIds: z
+    .array(z.number().int().positive('Élève invalide'))
+    .min(1, 'Sélectionnez au moins un enfant')
+    .max(50, 'Trop d\'enfants sélectionnés')
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'Un enfant est sélectionné deux fois' }),
+  method: optionalTextField('La méthode', 50),
+  expectedTotalCents: z.number().int().nonnegative().optional(),
+});
+
 export const paymentUpdateSchema = z.object({
   amount: euroAmount(0.01, 'Le montant'),
   method: optionalTextField('La méthode', 50),

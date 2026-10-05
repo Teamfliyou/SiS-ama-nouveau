@@ -1,23 +1,32 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { CreditCard, Plus, Pencil, Trash2, X, Save, AlertCircle, CheckCircle2, Filter } from 'lucide-react';
+import { CreditCard, Plus, Pencil, Trash2, X, Save, AlertCircle, CheckCircle2, Filter, Users } from 'lucide-react';
 import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, parseAmount } from '../utils/format';
 import { toast } from '../utils/toast';
 import { useIsMobile } from '../hooks/useIsMobile';
 import Sheet from '../components/mobile/Sheet';
 import ActionMenu from '../components/mobile/ActionMenu';
 import { mList, mInput, mPrimaryBtn } from '../components/mobile/styles';
+import FamilyPaymentForm from '../components/FamilyPaymentForm';
 
+type PaymentGroup = { id: number; date: string; method: string; subtotal: number; discount: number; total: number };
 type Payment = {
   id: number;
   amount: number;
+  discount: number;
   date: string;
   method: string;
   studentId: number;
+  groupId: number | null;
+  group: PaymentGroup | null;
   student: { id: number; firstName: string; lastName: string; classId: number | null; class: { id: number; name: string } | null };
 };
-type Student = { id: number; firstName: string; lastName: string; classId: number | null; class: { id: number; name: string; tuitionFee: number } | null; totalPaid: number; totalAmountDue: number; remaining: number };
+type Student = { id: number; firstName: string; lastName: string; classId: number | null; class: { id: number; name: string; tuitionFee: number } | null; totalPaid: number; totalDiscount: number; totalAmountDue: number; remaining: number; remainingCents: number };
+/** Une ligne d'historique : paiement individuel, ou paiement groupé (plusieurs enfants, une transaction). */
+type HistoryItem =
+  | { kind: 'single'; key: string; date: string; method: string; amount: number; pay: Payment }
+  | { kind: 'group'; key: string; date: string; method: string; amount: number; group: PaymentGroup; lines: Payment[] };
 type ClassItem = { id: number; name: string; tuitionFee: number; _count: { students: number } };
 
 export default function Finances() {
@@ -35,6 +44,7 @@ export default function Finances() {
   const [studentId, setStudentId] = useState('');
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Espèces');
+  const [multiMode, setMultiMode] = useState(false);
 
   // Mobile : formulaire en bottom sheet
   const isMobile = useIsMobile();
@@ -89,14 +99,37 @@ export default function Finances() {
     ? payments.filter(p => p.student?.class?.id === parseInt(filterClassId) || p.student?.classId === parseInt(filterClassId))
     : payments;
 
+  // Regroupe les lignes d'un même paiement groupé en une seule transaction.
+  const history: HistoryItem[] = [];
+  const groupItems = new Map<number, Extract<HistoryItem, { kind: 'group' }>>();
+  for (const p of filteredPayments) {
+    if (p.groupId !== null && p.group) {
+      const existing = groupItems.get(p.groupId);
+      if (existing) { existing.lines.push(p); continue; }
+      const item = { kind: 'group' as const, key: `g${p.groupId}`, date: p.group.date, method: p.group.method, amount: p.group.total, group: p.group, lines: [p] };
+      groupItems.set(p.groupId, item);
+      history.push(item);
+    } else {
+      history.push({ kind: 'single', key: `p${p.id}`, date: p.date, method: p.method, amount: p.amount, pay: p });
+    }
+  }
+  // Avec un filtre de classe, le groupe reste affiché en entier (tous ses enfants).
+  if (filterClassId) {
+    for (const item of groupItems.values()) item.lines = payments.filter(p => p.groupId === item.group.id);
+  }
+  const childNames = (lines: Payment[]) => lines.map(l => l.student.firstName).join(', ');
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentId && !editingId) return;
+    // L'API attend des nombres (montant en euros, identifiant d'élève).
+    const amountValue = parseAmount(amount);
+    if (amountValue === null) { toast.error('Montant invalide'); return; }
     setLoading(true);
     try {
       const body = editingId
-        ? JSON.stringify({ amount, method })
-        : JSON.stringify({ amount, studentId, method });
+        ? JSON.stringify({ amount: amountValue, method })
+        : JSON.stringify({ amount: amountValue, studentId: Number(studentId), method });
       const res = editingId
         ? await authFetch(`/api/finances/${editingId}`, { method: 'PUT', body })
         : await authFetch('/api/finances', { method: 'POST', body });
@@ -112,6 +145,23 @@ export default function Finances() {
     }
   };
 
+  const handleDeleteGroup = async (groupId: number) => {
+    if (!window.confirm('Annuler ce paiement groupé ? Tous les enfants concernés redeviendront à payer.')) return;
+    try {
+      await safeJson(await authFetch(`/api/finances/groups/${groupId}`, { method: 'DELETE' }));
+      toast.success('Paiement groupé annulé');
+      fetchPayments();
+      fetchStudents();
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
+  };
+
+  const refreshBalances = () => {
+    fetchPayments();
+    fetchStudents();
+  };
+
   const handleDelete = async (id: number) => {
     if(!window.confirm("Voulez-vous vraiment supprimer ce paiement ?")) return;
     try {
@@ -125,6 +175,7 @@ export default function Finances() {
   };
 
   const openEdit = (pay: Payment) => {
+    setMultiMode(false);
     setEditingId(pay.id);
     setStudentId(pay.studentId.toString());
     setAmount(pay.amount.toString());
@@ -138,12 +189,13 @@ export default function Finances() {
     setAmount('');
     setMethod('Espèces');
     setFormClassId('');
+    setMultiMode(false);
     setFormOpen(false);
   };
 
   const openCreate = () => { resetForm(); setFormOpen(true); };
 
-  const studentSummary = selectedStudent && (
+  const studentSummary = !multiMode && selectedStudent && (
       <div className={`p-5 rounded-2xl border animate-in zoom-in-95 duration-200 ${selectedStudent.remaining <= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-blue-50 border-blue-100'}`}>
          <h4 className="text-sm font-semibold text-slate-900 mb-4 flex items-center">
            {selectedStudent.remaining <= 0 ? <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-500" /> : <CreditCard className="w-4 h-4 mr-2 text-blue-500" />}
@@ -158,6 +210,12 @@ export default function Finances() {
              <span className="text-slate-500">Déjà payé :</span>
              <span className="font-bold text-emerald-600">+{formatCurrency(selectedStudent.totalPaid)}</span>
            </div>
+           {selectedStudent.totalDiscount > 0 && (
+             <div className="flex justify-between text-xs">
+               <span className="text-slate-500">Réduction famille :</span>
+               <span className="font-bold text-emerald-600">+{formatCurrency(selectedStudent.totalDiscount)}</span>
+             </div>
+           )}
            <div className="pt-2 border-t border-blue-200 flex justify-between items-center">
              <span className="text-xs font-bold text-slate-700">Reste à payer :</span>
              <span className={`text-sm font-black ${selectedStudent.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>
@@ -242,9 +300,33 @@ export default function Finances() {
     </form>
   );
 
+  // Interrupteur « Payer plusieurs enfants » (création uniquement).
+  const multiSwitch = !editingId && (
+    <div className="mobile:px-5">
+      <button
+        type="button" role="switch" aria-checked={multiMode}
+        onClick={() => { setMultiMode(m => !m); setStudentId(''); }}
+        className="w-full flex items-center gap-3 px-4 min-h-[52px] rounded-2xl glass-surface text-left"
+      >
+        <Users className={`w-5 h-5 shrink-0 ${multiMode ? 'text-primary' : 'text-slate-400'}`} />
+        <span className="flex-1 min-w-0">
+          <span className="block text-[15px] font-semibold text-slate-800">Payer plusieurs enfants</span>
+          <span className="block text-[12px] text-slate-500">−10 % dès 2 enfants</span>
+        </span>
+        <span className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${multiMode ? 'bg-primary' : 'bg-slate-300'}`}>
+          <span className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${multiMode ? 'translate-x-5' : ''}`} />
+        </span>
+      </button>
+    </div>
+  );
+
+  const activeForm = multiMode && !editingId
+    ? <FamilyPaymentForm students={students} classes={classes} onPaid={() => { refreshBalances(); setFormOpen(false); }} onRefresh={refreshBalances} />
+    : paymentForm;
+
   // ── Téléphone ──
   const formatShortDate = (d: string) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-  const filteredTotal = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
+  const filteredTotal = history.reduce((sum, h) => sum + h.amount, 0);
 
   const mobileView = (
     <div className="space-y-5">
@@ -256,7 +338,7 @@ export default function Finances() {
         <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0 px-1">
             <h3 className="text-[15px] font-semibold text-slate-800">Historique</h3>
-            <p className="text-[13px] text-slate-500 truncate">{filteredPayments.length} · <span className="font-medium text-emerald-600">{formatCurrency(filteredTotal)}</span></p>
+            <p className="text-[13px] text-slate-500 truncate">{history.length} · <span className="font-medium text-emerald-600">{formatCurrency(filteredTotal)}</span></p>
           </div>
           <div className="relative w-[136px] shrink-0">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -267,15 +349,37 @@ export default function Finances() {
           </div>
         </div>
 
-        {filteredPayments.length === 0 ? (
+        {history.length === 0 ? (
           <div className="glass-surface rounded-2xl px-6 py-12 text-center">
             <AlertCircle className="w-10 h-10 mx-auto text-slate-300 mb-2" />
             <p className="text-[15px] font-medium text-slate-500">Aucune transaction.</p>
           </div>
         ) : (
           <ul className={mList}>
-            {filteredPayments.map(pay => (
-              <li key={pay.id} className="flex items-center gap-3 pl-4 pr-3 min-h-[64px]">
+            {history.map(item => {
+              if (item.kind === 'group') return (
+              <li key={item.key} className="flex items-center gap-3 pl-4 pr-3 min-h-[64px]">
+                <div className="flex-1 min-w-0 py-3">
+                  <span className="flex items-baseline gap-2">
+                    <span className="flex-1 min-w-0 text-[15px] font-semibold text-slate-900 truncate">{childNames(item.lines)}</span>
+                    <span className="shrink-0 text-[15px] font-bold text-emerald-600">+{formatCurrency(item.amount)}</span>
+                  </span>
+                  <span className="block text-[13px] text-slate-500 truncate">
+                    {formatShortDate(item.date)}<span className="mx-1.5 text-slate-300">·</span>{item.method}<span className="mx-1.5 text-slate-300">·</span>
+                    <span className="text-primary font-medium">{item.lines.length} enfants · −{formatCurrency(item.group.discount)}</span>
+                  </span>
+                </div>
+                <ActionMenu
+                  title={`${formatCurrency(item.amount)} — ${childNames(item.lines)}`}
+                  actions={[
+                    { label: 'Annuler le paiement groupé', icon: Trash2, onClick: () => handleDeleteGroup(item.group.id), danger: true },
+                  ]}
+                />
+              </li>
+              );
+              const { pay } = item;
+              return (
+              <li key={item.key} className="flex items-center gap-3 pl-4 pr-3 min-h-[64px]">
                 <button type="button" onClick={() => openEdit(pay)} className="flex-1 min-w-0 flex items-center gap-3 py-3 text-left">
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline gap-2">
@@ -295,14 +399,18 @@ export default function Finances() {
                   ]}
                 />
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </section>
 
       <Sheet open={formOpen} onClose={resetForm} title={editingId ? 'Modifier le paiement' : 'Nouveau paiement'}>
-        {selectedStudent && <div className="px-5 pb-4">{studentSummary}</div>}
-        {paymentForm}
+        <div className="space-y-4">
+          {multiSwitch}
+          {studentSummary && <div className="px-5">{studentSummary}</div>}
+          {activeForm}
+        </div>
       </Sheet>
     </div>
   );
@@ -319,7 +427,7 @@ export default function Finances() {
       {isMobile ? mobileView : (
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Left Column: Form and Summary */}
-        <div className="lg:col-span-1 space-y-6">
+        <div className={`${multiMode && !editingId ? 'lg:col-span-2' : 'lg:col-span-1'} space-y-6`}>
           {/* Summary Card */}
           {studentSummary}
 
@@ -335,12 +443,15 @@ export default function Finances() {
                 </button>
               )}
             </div>
-            {paymentForm}
+            <div className="space-y-4">
+              {multiSwitch}
+              {activeForm}
+            </div>
           </div>
         </div>
 
         {/* Right Column: History Table */}
-        <div className="lg:col-span-3">
+        <div className={multiMode && !editingId ? 'lg:col-span-2' : 'lg:col-span-3'}>
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
                 <h3 className="font-bold text-slate-800">Historique des transactions</h3>
@@ -368,7 +479,7 @@ export default function Finances() {
                  </tr>
                </thead>
                <tbody className="bg-white divide-y divide-slate-100">
-                 {filteredPayments.length === 0 ? (
+                 {history.length === 0 ? (
                    <tr>
                      <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
                        <AlertCircle className="w-12 h-12 mx-auto text-slate-300 mb-3" />
@@ -376,8 +487,42 @@ export default function Finances() {
                      </td>
                    </tr>
                  ) : (
-                   filteredPayments.map((pay) => (
-                     <tr key={pay.id} className="hover:bg-slate-50/30 group transition-colors">
+                   history.map((item) => {
+                     if (item.kind === 'group') return (
+                     <tr key={item.key} className="hover:bg-slate-50/30 group transition-colors">
+                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                         {new Date(item.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                       </td>
+                       <td className="px-6 py-4">
+                         <div className="text-sm font-semibold text-slate-900">
+                           {item.lines.map(l => `${l.student.firstName} ${l.student.lastName}`).join(', ')}
+                         </div>
+                         <div className="text-xs text-primary font-medium">
+                           Paiement famille · {item.lines.length} enfants · sous-total {formatCurrency(item.group.subtotal)} · réduction −{formatCurrency(item.group.discount)}
+                         </div>
+                       </td>
+                       <td className="px-6 py-4 whitespace-nowrap">
+                         <span className="text-sm font-black text-emerald-600">+{formatCurrency(item.amount)}</span>
+                       </td>
+                       <td className="px-6 py-4 whitespace-nowrap">
+                         <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] uppercase font-black bg-slate-100 text-slate-500 border border-slate-200">
+                           {item.method}
+                         </span>
+                       </td>
+                       <td className="px-6 py-4 text-right space-x-2">
+                         <button
+                           onClick={() => handleDeleteGroup(item.group.id)}
+                           className="inline-flex items-center p-1.5 border border-slate-100 text-slate-400 rounded-lg hover:bg-red-50 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                           title="Annuler le paiement groupé"
+                         >
+                           <Trash2 className="w-3.5 h-3.5" />
+                         </button>
+                       </td>
+                     </tr>
+                     );
+                     const { pay } = item;
+                     return (
+                     <tr key={item.key} className="hover:bg-slate-50/30 group transition-colors">
                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                          {new Date(pay.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                        </td>
@@ -410,7 +555,8 @@ export default function Finances() {
                          </button>
                        </td>
                      </tr>
-                   ))
+                     );
+                   })
                  )}
                </tbody>
              </table>
