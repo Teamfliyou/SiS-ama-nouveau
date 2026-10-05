@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, firstNameFromEmail } from '../utils/format';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { mList, mSectionTitle } from '../components/mobile/styles';
 
@@ -138,7 +138,7 @@ export default function Dashboard() {
 
   // ── Téléphone : une carte principale, quelques indicateurs, puis une liste ──
   if (isMobile) {
-    const firstName = (localStorage.getItem('user') || '').split('@')[0];
+    const firstName = firstNameFromEmail(localStorage.getItem('user'));
     const indicators = [
       { label: 'Élèves',  value: stats.studentsCount, link: '/students' },
       { label: 'Classes', value: stats.classesCount,  link: '/classes' },
