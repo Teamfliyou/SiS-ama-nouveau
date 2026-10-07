@@ -106,6 +106,16 @@ export const roleUpdateSchema = z.object({
   role: roleSchema,
 });
 
+/** Optional class id. HTML selects send it as text ("3"), so numeric strings are accepted; '' means no class. */
+const optionalClassIdSchema = z.preprocess(
+  (v) => (typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : v),
+  z
+    .union([z.number().int().positive('La classe doit être un entier positif'), z.null(), z.literal('')])
+    .nullable()
+    .optional()
+    .transform((v) => (v === '' || v === null || v === undefined ? null : v as number))
+);
+
 export const classCreateSchema = z.object({
   name: nameField('Le nom de la classe', 120),
   tuitionFee: euroAmount(0, 'Les frais de scolarité').optional(),
@@ -115,11 +125,7 @@ export const studentCreateSchema = z.object({
   firstName: nameField('Le prénom'),
   lastName: nameField('Le nom'),
   phone: optionalPhoneSchema,
-  classId: z
-    .union([z.number().int().positive('La classe doit être un entier positif'), z.null(), z.literal('')])
-    .nullable()
-    .optional()
-    .transform((v) => (v === '' || v === null || v === undefined ? null : v as number)),
+  classId: optionalClassIdSchema,
 });
 
 export const teacherCreateSchema = z.object({
@@ -128,11 +134,7 @@ export const teacherCreateSchema = z.object({
   subject: optionalTextField('La matière'),
   email: optionalEmailSchema,
   phone: optionalPhoneSchema,
-  classId: z
-    .union([z.number().int().positive('La classe doit être un entier positif'), z.null(), z.literal('')])
-    .nullable()
-    .optional()
-    .transform((v) => (v === '' || v === null || v === undefined ? null : v as number)),
+  classId: optionalClassIdSchema,
 });
 
 export const paymentCreateSchema = z.object({
