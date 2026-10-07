@@ -16,14 +16,16 @@ model User {
 }
 
 model Class {
-  id              Int          @id @default(autoincrement())
-  name            String       @unique
-  tuitionFeeCents Int          @default(0)
+  id              Int             @id @default(autoincrement())
+  name            String          @unique
+  tuitionFeeCents Int             @default(0)
   students        Student[]
   attendances     Attendance[]
   teachers        Teacher[]
   evaluations     Evaluation[]
-  createdAt       DateTime     @default(now())
+  timetableSlots  TimetableSlot[]
+  lessons         Lesson[]
+  createdAt       DateTime        @default(now())
 }
 
 model Student {
@@ -72,15 +74,17 @@ model PaymentGroup {
 }
 
 model Teacher {
-  id        Int      @id @default(autoincrement())
-  firstName String
-  lastName  String
-  subject   String?
-  email     String?  @unique
-  phone     String?
-  classId   Int?
-  class     Class?   @relation(fields: [classId], references: [id])
-  createdAt DateTime @default(now())
+  id             Int             @id @default(autoincrement())
+  firstName      String
+  lastName       String
+  subject        String?
+  email          String?         @unique
+  phone          String?
+  classId        Int?
+  class          Class?          @relation(fields: [classId], references: [id])
+  timetableSlots TimetableSlot[]
+  lessons        Lesson[]
+  createdAt      DateTime        @default(now())
 }
 
 model Attendance {
@@ -100,11 +104,13 @@ model Attendance {
 // Subject graded with marks (Arabe, Éducation islamique...). The Juz Amma is
 // NOT a subject: it is assessed with competencies (see SurahAssessment).
 model Subject {
-  id          Int          @id @default(autoincrement())
-  name        String       @unique
-  coefficient Int          @default(1)
-  evaluations Evaluation[]
-  createdAt   DateTime     @default(now())
+  id             Int             @id @default(autoincrement())
+  name           String          @unique
+  coefficient    Int             @default(1)
+  evaluations    Evaluation[]
+  timetableSlots TimetableSlot[]
+  lessons        Lesson[]
+  createdAt      DateTime        @default(now())
 }
 
 // A grading period (trimestre, semestre...). Its dates bound the attendance
@@ -176,4 +182,57 @@ model ReportRemark {
   updatedAt DateTime @updatedAt
 
   @@unique([studentId, termId])
+}
+
+// ─── Emplois du temps et cahier de textes ────────────────────────────
+
+// Weekly recurring course of a class (e.g. every Saturday 09:00-10:30, Arabe).
+// The activity is either a graded subject or a free label (Coran, Juz Amma...),
+// since the Juz Amma is not a subject.
+model TimetableSlot {
+  id        Int      @id @default(autoincrement())
+  dayOfWeek Int // 1 = lundi ... 7 = dimanche (ISO 8601)
+  startTime String // "HH:MM"
+  endTime   String // "HH:MM"
+  label     String?
+  room      String?
+  classId   Int
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId Int?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  teacherId Int?
+  teacher   Teacher? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  lessons   Lesson[]
+  createdAt DateTime @default(now())
+
+  @@index([classId, dayOfWeek])
+  @@index([teacherId, dayOfWeek])
+}
+
+// One session actually held (cahier de textes): what was done and the work to
+// do for the next session. Subject, label and times are copied from the slot so
+// the log stays right when the timetable changes later in the year.
+model Lesson {
+  id              Int            @id @default(autoincrement())
+  date            String // "YYYY-MM-DD"
+  startTime       String? // "HH:MM"
+  endTime         String? // "HH:MM"
+  label           String?
+  content         String?
+  homework        String?
+  homeworkDueDate String? // "YYYY-MM-DD", set whenever homework is
+  classId         Int
+  class           Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  slotId          Int?
+  slot            TimetableSlot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  subjectId       Int?
+  subject         Subject?       @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  teacherId       Int?
+  teacher         Teacher?       @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([classId, date, slotId])
+  @@index([classId, date])
+  @@index([homeworkDueDate])
 }

@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu,
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
   ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer,
-  NotebookPen, Sparkles, FileText, BookMarked
+  NotebookPen, Sparkles, FileText, BookMarked, CalendarDays, NotebookText
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../utils/api';
@@ -55,6 +55,8 @@ export default function Layout() {
     { name: 'Finances',        href: '/finances',     icon: CreditCard },
     { name: 'Appel',           href: '/attendance',   icon: ClipboardList },
     { name: 'Feuilles d\'appel', href: '/attendance-sheets', icon: Printer },
+    { name: 'Emploi du temps', href: '/timetable',    icon: CalendarDays },
+    { name: 'Cahier de textes', href: '/lessons',     icon: NotebookText },
     { name: 'Notes',           href: '/grades',       icon: NotebookPen },
     { name: 'Juz Amma',        href: '/competencies', icon: Sparkles },
     { name: 'Bulletins',       href: '/report-cards', icon: FileText },

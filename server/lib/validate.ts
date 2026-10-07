@@ -106,15 +106,18 @@ export const roleUpdateSchema = z.object({
   role: roleSchema,
 });
 
-/** Optional class id. HTML selects send it as text ("3"), so numeric strings are accepted; '' means no class. */
-const optionalClassIdSchema = z.preprocess(
-  (v) => (typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : v),
-  z
-    .union([z.number().int().positive('La classe doit être un entier positif'), z.null(), z.literal('')])
-    .nullable()
-    .optional()
-    .transform((v) => (v === '' || v === null || v === undefined ? null : v as number))
-);
+/** Optional DB id. HTML selects send it as text ("3"), so numeric strings are accepted; '' means none. */
+const optionalIdSchema = (message: string) =>
+  z.preprocess(
+    (v) => (typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : v),
+    z
+      .union([z.number().int().positive(message), z.null(), z.literal('')])
+      .nullable()
+      .optional()
+      .transform((v) => (v === '' || v === null || v === undefined ? null : v as number))
+  );
+
+const optionalClassIdSchema = optionalIdSchema('La classe doit être un entier positif');
 
 export const classCreateSchema = z.object({
   name: nameField('Le nom de la classe', 120),
@@ -275,6 +278,57 @@ export const reportRemarkSchema = z.object({
   termId: z.number().int().positive('Période invalide'),
   comment: z.string().trim().max(1000, 'Appréciation trop longue (max 1000)'),
 });
+
+// ─── Timetable and lesson log (cahier de textes) ─────────────────────
+
+export const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "L'heure doit être au format HH:MM");
+
+/** Empty string or null -> null, otherwise must match `schema`. */
+const optionalOf = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (v === '' || v === undefined ? null : v), schema.nullable());
+
+export const timetableSlotSchema = z
+  .object({
+    classId: z.number().int().positive('Classe invalide'),
+    dayOfWeek: z.number('Jour invalide').int('Jour invalide').min(1, 'Jour invalide').max(7, 'Jour invalide'),
+    startTime: timeSchema,
+    endTime: timeSchema,
+    subjectId: optionalIdSchema('Matière invalide'),
+    label: optionalTextField("L'activité", 80),
+    teacherId: optionalIdSchema('Professeur invalide'),
+    room: optionalTextField('La salle', 40),
+  })
+  .refine((s) => s.startTime < s.endTime, { message: "L'heure de fin doit suivre l'heure de début" })
+  .refine((s) => s.subjectId !== null || s.label !== null, { message: 'Choisissez une matière ou indiquez une activité' });
+
+export const lessonSchema = z
+  .object({
+    classId: z.number().int().positive('Classe invalide'),
+    date: dateStringSchema,
+    // Course of the timetable this session belongs to; null for a session outside the timetable.
+    slotId: optionalIdSchema('Créneau invalide'),
+    // Used only without slotId (otherwise copied from the slot).
+    subjectId: optionalIdSchema('Matière invalide'),
+    label: optionalTextField("L'activité", 80),
+    startTime: optionalOf(timeSchema),
+    endTime: optionalOf(timeSchema),
+    teacherId: optionalIdSchema('Professeur invalide'),
+    content: optionalTextField('Le contenu de la séance', 5000),
+    homework: optionalTextField('Le travail à faire', 2000),
+    homeworkDueDate: optionalOf(dateStringSchema),
+  })
+  .refine((l) => l.content !== null || l.homework !== null, {
+    message: 'Renseignez le contenu de la séance ou le travail à faire',
+  })
+  .refine((l) => l.homework === null || l.homeworkDueDate !== null, {
+    message: 'Indiquez pour quand le travail est à faire',
+  })
+  .refine((l) => l.homework === null || l.homeworkDueDate === null || l.homeworkDueDate >= l.date, {
+    message: 'Le travail ne peut pas être à faire avant la séance',
+  })
+  .refine((l) => l.startTime === null || l.endTime === null || l.startTime < l.endTime, {
+    message: "L'heure de fin doit suivre l'heure de début",
+  });
 
 // ─── Middleware ───────────────────────────────────────────────────────
 
