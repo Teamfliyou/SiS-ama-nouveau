@@ -50,6 +50,12 @@ export async function adminSession(): Promise<{ token: string; id: number }> {
 
 /** Empties all tables (FK-safe order). Called before each test. */
 export async function resetDb() {
+  await prisma.grade.deleteMany();
+  await prisma.evaluation.deleteMany();
+  await prisma.surahAssessment.deleteMany();
+  await prisma.reportRemark.deleteMany();
+  await prisma.subject.deleteMany();
+  await prisma.term.deleteMany();
   await prisma.attendance.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.paymentGroup.deleteMany();

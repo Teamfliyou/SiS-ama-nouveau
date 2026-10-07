@@ -15,6 +15,11 @@ import importCsvRoutes from '../routes/importCsv';
 import dataRoutes from '../routes/data';
 import statsRoutes from '../routes/stats';
 import setupRoutes from '../routes/setup';
+import subjectRoutes from '../routes/subjects';
+import termRoutes from '../routes/terms';
+import evaluationRoutes from '../routes/evaluations';
+import competencyRoutes from '../routes/competencies';
+import reportCardRoutes from '../routes/reportCards';
 import { getJwtSecret } from './secret';
 
 /** Fails fast on a missing/weak JWT secret. Never rely on a default value. */
@@ -66,6 +71,11 @@ export function createApp(): Express {
   app.use('/api/teachers', teacherRoutes);
   app.use('/api/attendance', attendanceRoutes);
   app.use('/api/finances', financeRoutes);
+  app.use('/api/subjects', subjectRoutes);
+  app.use('/api/terms', termRoutes);
+  app.use('/api/evaluations', evaluationRoutes);
+  app.use('/api/competencies', competencyRoutes);
+  app.use('/api/report-cards', reportCardRoutes);
   app.use('/api/import-csv', importCsvRoutes);
   app.use('/api', dataRoutes); // /api/export, /api/import/full
   app.use('/api/stats', statsRoutes);

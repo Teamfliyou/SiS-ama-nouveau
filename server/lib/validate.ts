@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { NextFunction, Request, Response } from 'express';
 import { AppError } from './errors';
+import { COMPETENCY_LEVELS, JUZ_AMMA_SURAHS, SURAH_NUMBERS } from './juzAmma';
 
 // ─── Common primitives ────────────────────────────────────────────────
 
@@ -105,6 +106,16 @@ export const roleUpdateSchema = z.object({
   role: roleSchema,
 });
 
+/** Optional class id. HTML selects send it as text ("3"), so numeric strings are accepted; '' means no class. */
+const optionalClassIdSchema = z.preprocess(
+  (v) => (typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : v),
+  z
+    .union([z.number().int().positive('La classe doit être un entier positif'), z.null(), z.literal('')])
+    .nullable()
+    .optional()
+    .transform((v) => (v === '' || v === null || v === undefined ? null : v as number))
+);
+
 export const classCreateSchema = z.object({
   name: nameField('Le nom de la classe', 120),
   tuitionFee: euroAmount(0, 'Les frais de scolarité').optional(),
@@ -114,11 +125,7 @@ export const studentCreateSchema = z.object({
   firstName: nameField('Le prénom'),
   lastName: nameField('Le nom'),
   phone: optionalPhoneSchema,
-  classId: z
-    .union([z.number().int().positive('La classe doit être un entier positif'), z.null(), z.literal('')])
-    .nullable()
-    .optional()
-    .transform((v) => (v === '' || v === null || v === undefined ? null : v as number)),
+  classId: optionalClassIdSchema,
 });
 
 export const teacherCreateSchema = z.object({
@@ -127,11 +134,7 @@ export const teacherCreateSchema = z.object({
   subject: optionalTextField('La matière'),
   email: optionalEmailSchema,
   phone: optionalPhoneSchema,
-  classId: z
-    .union([z.number().int().positive('La classe doit être un entier positif'), z.null(), z.literal('')])
-    .nullable()
-    .optional()
-    .transform((v) => (v === '' || v === null || v === undefined ? null : v as number)),
+  classId: optionalClassIdSchema,
 });
 
 export const paymentCreateSchema = z.object({
@@ -190,6 +193,87 @@ export const attendanceCreateSchema = z.object({
       })
     )
     .min(1, 'Aucun élève fourni'),
+});
+
+// ─── School records: subjects, terms, evaluations, competencies ──────
+
+const smallInt = (label: string, min: number, max: number) =>
+  z
+    .number(`${label} doit être un nombre`)
+    .int(`${label} doit être un entier`)
+    .min(min, `${label} doit être au moins ${min}`)
+    .max(max, `${label} ne peut pas dépasser ${max}`);
+
+export const subjectSchema = z.object({
+  name: nameField('Le nom de la matière', 80),
+  coefficient: smallInt('Le coefficient', 0, 20).default(1),
+});
+
+export const termSchema = z
+  .object({
+    name: nameField('Le nom de la période', 80),
+    startDate: dateStringSchema,
+    endDate: dateStringSchema,
+  })
+  .refine((t) => t.startDate <= t.endDate, { message: 'La date de fin doit suivre la date de début' });
+
+export const evaluationSchema = z.object({
+  title: nameField("L'intitulé de l'évaluation", 120),
+  date: dateStringSchema,
+  maxScore: smallInt('Le barème', 1, 100).default(20),
+  coefficient: smallInt('Le coefficient', 1, 20).default(1),
+  classId: z.number().int().positive('Classe invalide'),
+  subjectId: z.number().int().positive('Matière invalide'),
+  termId: z.number().int().positive('Période invalide'),
+});
+
+/** A mark: >= 0 with at most 2 decimals (checked against the evaluation's scale by the route). */
+const scoreSchema = z
+  .number('La note doit être un nombre')
+  .finite('La note doit être un nombre')
+  .min(0, 'Une note ne peut pas être négative')
+  .max(100, 'Note trop élevée')
+  .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, {
+    message: 'Une note ne peut pas avoir plus de 2 décimales',
+  });
+
+export const gradesSaveSchema = z.object({
+  grades: z
+    .array(
+      z.object({
+        studentId: z.number().int().positive('Élève invalide'),
+        // null + absent=false clears the mark.
+        score: scoreSchema.nullable(),
+        absent: z.boolean().default(false),
+      })
+    )
+    .min(1, 'Aucune note fournie')
+    .max(500, 'Trop de notes'),
+});
+
+export const competencyLevelSchema = z.enum(COMPETENCY_LEVELS, { message: 'Niveau de compétence invalide' });
+
+export const competenciesSaveSchema = z.object({
+  studentId: z.number().int().positive('Élève invalide'),
+  termId: z.number().int().positive('Période invalide'),
+  levels: z
+    .array(
+      z.object({
+        surahNumber: z
+          .number()
+          .int()
+          .refine((n) => SURAH_NUMBERS.has(n), { message: "Sourate hors du Juz Amma (78 à 114)" }),
+        // null clears the assessment of that surah.
+        level: competencyLevelSchema.nullable(),
+      })
+    )
+    .max(JUZ_AMMA_SURAHS.length, 'Trop de sourates'),
+});
+
+export const reportRemarkSchema = z.object({
+  studentId: z.number().int().positive('Élève invalide'),
+  termId: z.number().int().positive('Période invalide'),
+  comment: z.string().trim().max(1000, 'Appréciation trop longue (max 1000)'),
 });
 
 // ─── Middleware ───────────────────────────────────────────────────────

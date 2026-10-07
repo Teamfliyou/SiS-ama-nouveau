@@ -87,7 +87,7 @@ body {
   @media (prefers-reduced-motion: reduce) { animation: none; }
 }
 
-/* ── Print styles (Feuille d'appel) ───────────────────────────────── */
+/* ── Print styles (Feuille d'appel, bulletins) ───────────────────────────────── */
 @media print {
   @page {
     size: A4 portrait;
@@ -105,6 +105,8 @@ body {
   .print-area,
   .print-area * {
     visibility: visible;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 
   .print-area {
@@ -122,5 +124,10 @@ body {
 
   .no-print {
     display: none !important;
+  }
+
+  /* Bulletins : un élève par page. */
+  .print-page-break {
+    break-after: page;
   }
 }
