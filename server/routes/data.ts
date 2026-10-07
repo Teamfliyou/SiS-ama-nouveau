@@ -6,6 +6,7 @@ import { asyncHandler } from '../lib/errors';
 import { validate, isRealDateString } from '../lib/validate';
 import { normalizeKey, studentKey } from '../lib/dedupe';
 import { eurosToCents } from '../lib/money';
+import { COMPETENCY_LEVELS, SURAH_NUMBERS } from '../lib/juzAmma';
 
 const router = Router();
 
@@ -140,6 +141,59 @@ const importPayloadSchema = z.object({
     )
     .max(MAX_ITEMS)
     .optional(),
+  subjects: z
+    .array(z.object({ name: z.string().trim().min(1).max(80), coefficient: z.number().int().min(0).max(20).default(1) }))
+    .max(MAX_ITEMS)
+    .optional(),
+  terms: z
+    .array(z.object({ name: z.string().trim().min(1).max(80), startDate: attendanceDateSchema, endDate: attendanceDateSchema }))
+    .max(MAX_ITEMS)
+    .optional(),
+  evaluations: z
+    .array(
+      z.object({
+        title: z.string().trim().min(1).max(120),
+        date: attendanceDateSchema,
+        maxScore: z.number().int().min(1).max(100).default(20),
+        coefficient: z.number().int().min(1).max(20).default(1),
+        class: z.object({ name: z.string() }),
+        subject: z.object({ name: z.string() }),
+        term: z.object({ name: z.string() }),
+        grades: z
+          .array(
+            z.object({
+              studentId: z.number().int(),
+              scoreCents: z.number().int().nonnegative().max(10_000).nullable().default(null),
+              absent: z.boolean().default(false),
+            })
+          )
+          .max(MAX_ITEMS)
+          .default([]),
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
+  surahAssessments: z
+    .array(
+      z.object({
+        studentId: z.number().int(),
+        surahNumber: z.number().int().refine((n) => SURAH_NUMBERS.has(n)),
+        level: z.enum(COMPETENCY_LEVELS),
+        term: z.object({ name: z.string() }),
+      })
+    )
+    .max(MAX_ITEMS * 4)
+    .optional(),
+  reportRemarks: z
+    .array(
+      z.object({
+        studentId: z.number().int(),
+        comment: z.string().trim().min(1).max(1000),
+        term: z.object({ name: z.string() }),
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
 });
 
 // GET /api/export — full JSON backup. Never includes passwords, tokens or secrets.
@@ -148,13 +202,38 @@ router.get(
   authenticate,
   requireAdmin,
   asyncHandler(async (_req, res) => {
-    const [classes, students, teachers, payments, paymentGroups, attendances] = await Promise.all([
+    const [
+      classes,
+      students,
+      teachers,
+      payments,
+      paymentGroups,
+      attendances,
+      subjects,
+      terms,
+      evaluations,
+      surahAssessments,
+      reportRemarks,
+    ] = await Promise.all([
       prisma.class.findMany({ orderBy: { name: 'asc' } }),
       prisma.student.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } }),
       prisma.teacher.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } }),
       prisma.payment.findMany({ include: { student: true }, orderBy: { date: 'desc' } }),
       prisma.paymentGroup.findMany({ orderBy: { date: 'desc' } }),
       prisma.attendance.findMany({ include: { student: true, class: true }, orderBy: { date: 'desc' } }),
+      prisma.subject.findMany({ orderBy: { name: 'asc' } }),
+      prisma.term.findMany({ orderBy: { startDate: 'asc' } }),
+      prisma.evaluation.findMany({
+        include: {
+          class: { select: { name: true } },
+          subject: { select: { name: true } },
+          term: { select: { name: true } },
+          grades: true,
+        },
+        orderBy: { date: 'asc' },
+      }),
+      prisma.surahAssessment.findMany({ include: { term: { select: { name: true } } } }),
+      prisma.reportRemark.findMany({ include: { term: { select: { name: true } } } }),
     ]);
     res.setHeader(
       'Content-Disposition',
@@ -162,13 +241,18 @@ router.get(
     );
     res.json({
       exportDate: new Date().toISOString(),
-      version: '2',
+      version: '3',
       classes,
       students,
       teachers,
       payments,
       paymentGroups,
       attendances,
+      subjects,
+      terms,
+      evaluations,
+      surahAssessments,
+      reportRemarks,
     });
   })
 );
@@ -190,6 +274,11 @@ router.post(
       payments = [],
       paymentGroups = [],
       attendances = [],
+      subjects = [],
+      terms = [],
+      evaluations = [],
+      surahAssessments = [],
+      reportRemarks = [],
     } = payload;
 
     const counts = await prisma.$transaction(async (tx) => {
@@ -361,8 +450,79 @@ router.post(
         attendancesCreated++;
       }
 
+      // ─── School records (v3 backups) ─────────────────────────────────
+      // Subjects and terms are matched by name; an evaluation by class, subject,
+      // term, title and date. Marks, competencies and remarks already present are kept.
+      const subjectMap = new Map(
+        (await tx.subject.findMany({ select: { id: true, name: true } })).map((x) => [normalizeKey(x.name), x.id])
+      );
+      const termMap = new Map(
+        (await tx.term.findMany({ select: { id: true, name: true } })).map((x) => [normalizeKey(x.name), x.id])
+      );
+      for (const sub of subjects) {
+        const key = normalizeKey(sub.name);
+        if (subjectMap.has(key)) continue;
+        subjectMap.set(key, (await tx.subject.create({ data: sub })).id);
+      }
+      for (const t of terms) {
+        const key = normalizeKey(t.name);
+        if (termMap.has(key)) continue;
+        termMap.set(key, (await tx.term.create({ data: t })).id);
+      }
+
+      let gradesCreated = 0;
+      for (const ev of evaluations) {
+        const classId = resolveClassId(ev.class.name);
+        const subjectId = subjectMap.get(normalizeKey(ev.subject.name));
+        const termId = termMap.get(normalizeKey(ev.term.name));
+        if (classId === null || subjectId === undefined || termId === undefined) continue;
+        const existing = await tx.evaluation.findFirst({
+          where: { classId, subjectId, termId, title: ev.title, date: ev.date },
+        });
+        const evaluationId =
+          existing?.id ??
+          (
+            await tx.evaluation.create({
+              data: { classId, subjectId, termId, title: ev.title, date: ev.date, maxScore: ev.maxScore, coefficient: ev.coefficient },
+            })
+          ).id;
+        const rows = ev.grades.flatMap((g) => {
+          const sid = studentMap.get(g.studentId);
+          return sid === undefined ? [] : [{ evaluationId, studentId: sid, scoreCents: g.scoreCents, absent: g.absent }];
+        });
+        gradesCreated += (await tx.grade.createMany({ data: rows, skipDuplicates: true })).count;
+      }
+
+      const byStudentAndTerm = <T extends { studentId: number; term: { name: string } }>(items: T[]) =>
+        items.flatMap((item) => {
+          const sid = studentMap.get(item.studentId);
+          const termId = termMap.get(normalizeKey(item.term.name));
+          return sid === undefined || termId === undefined ? [] : [{ item, studentId: sid, termId }];
+        });
+      const competenciesCreated = (
+        await tx.surahAssessment.createMany({
+          data: byStudentAndTerm(surahAssessments).map(({ item, studentId, termId }) => ({
+            studentId,
+            termId,
+            surahNumber: item.surahNumber,
+            level: item.level,
+          })),
+          skipDuplicates: true,
+        })
+      ).count;
+      await tx.reportRemark.createMany({
+        data: byStudentAndTerm(reportRemarks).map(({ item, studentId, termId }) => ({
+          studentId,
+          termId,
+          comment: item.comment,
+        })),
+        skipDuplicates: true,
+      });
+
       return {
         success: true,
+        gradesCreated,
+        competenciesCreated,
         classesCreated,
         studentsCreated,
         teachersCreated,

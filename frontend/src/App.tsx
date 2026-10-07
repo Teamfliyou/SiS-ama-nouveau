@@ -10,6 +10,10 @@ import CsvImport from './pages/CsvImport';
 import UsersAdmin from './pages/UsersAdmin';
 import Teachers from './pages/Teachers';
 import Setup from './pages/Setup';
+import Grades from './pages/Grades';
+import Competencies from './pages/Competencies';
+import ReportCards from './pages/ReportCards';
+import SchoolSettings from './pages/SchoolSettings';
 import Layout from './components/Layout';
 
 // Protected Route wrapper
@@ -39,6 +43,10 @@ function App() {
           <Route path="import-csv" element={<CsvImport />} />
           <Route path="users" element={<UsersAdmin />} />
           <Route path="teachers" element={<Teachers />} />
+          <Route path="grades" element={<Grades />} />
+          <Route path="competencies" element={<Competencies />} />
+          <Route path="report-cards" element={<ReportCards />} />
+          <Route path="school-settings" element={<SchoolSettings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

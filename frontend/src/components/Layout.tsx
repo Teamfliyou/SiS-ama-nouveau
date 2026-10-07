@@ -2,7 +2,8 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu,
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
-  ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer
+  ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer,
+  NotebookPen, Sparkles, FileText, BookMarked
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../utils/api';
@@ -54,6 +55,10 @@ export default function Layout() {
     { name: 'Finances',        href: '/finances',     icon: CreditCard },
     { name: 'Appel',           href: '/attendance',   icon: ClipboardList },
     { name: 'Feuilles d\'appel', href: '/attendance-sheets', icon: Printer },
+    { name: 'Notes',           href: '/grades',       icon: NotebookPen },
+    { name: 'Juz Amma',        href: '/competencies', icon: Sparkles },
+    { name: 'Bulletins',       href: '/report-cards', icon: FileText },
+    { name: 'Matières & périodes', href: '/school-settings', icon: BookMarked },
     { name: 'Import CSV',      href: '/import-csv',   icon: UploadCloud },
     ...(isAdmin ? [{ name: 'Utilisateurs', href: '/users', icon: ShieldCheck }] : []),
   ];

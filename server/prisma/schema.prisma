@@ -22,19 +22,23 @@ model Class {
   students        Student[]
   attendances     Attendance[]
   teachers        Teacher[]
+  evaluations     Evaluation[]
   createdAt       DateTime     @default(now())
 }
 
 model Student {
-  id          Int          @id @default(autoincrement())
-  firstName   String
-  lastName    String
-  phone       String?
-  classId     Int?
-  class       Class?       @relation(fields: [classId], references: [id])
-  payments    Payment[]
-  attendances Attendance[]
-  createdAt   DateTime     @default(now())
+  id            Int               @id @default(autoincrement())
+  firstName     String
+  lastName      String
+  phone         String?
+  classId       Int?
+  class         Class?            @relation(fields: [classId], references: [id])
+  payments      Payment[]
+  attendances   Attendance[]
+  grades        Grade[]
+  surahLevels   SurahAssessment[]
+  reportRemarks ReportRemark[]
+  createdAt     DateTime          @default(now())
 }
 
 model Payment {
@@ -81,7 +85,7 @@ model Teacher {
 
 model Attendance {
   id        Int     @id @default(autoincrement())
-  date      String  // "YYYY-MM-DD"
+  date      String // "YYYY-MM-DD"
   studentId Int
   classId   Int
   status    String  @default("PRESENT") // PRESENT, ABSENT, LATE
@@ -89,4 +93,87 @@ model Attendance {
   class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
 
   @@unique([date, studentId])
+}
+
+// ─── Scolarité : notes, compétences Juz Amma, bulletins ──────────────
+
+// Subject graded with marks (Arabe, Éducation islamique...). The Juz Amma is
+// NOT a subject: it is assessed with competencies (see SurahAssessment).
+model Subject {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  coefficient Int          @default(1)
+  evaluations Evaluation[]
+  createdAt   DateTime     @default(now())
+}
+
+// A grading period (trimestre, semestre...). Its dates bound the attendance
+// counted on the report card.
+model Term {
+  id            Int               @id @default(autoincrement())
+  name          String            @unique
+  startDate     String // "YYYY-MM-DD"
+  endDate       String // "YYYY-MM-DD"
+  evaluations   Evaluation[]
+  surahLevels   SurahAssessment[]
+  reportRemarks ReportRemark[]
+  createdAt     DateTime          @default(now())
+}
+
+// One test given to a class (e.g. "Contrôle 1"), whose marks are entered together.
+model Evaluation {
+  id          Int      @id @default(autoincrement())
+  title       String
+  date        String // "YYYY-MM-DD"
+  maxScore    Int      @default(20)
+  coefficient Int      @default(1)
+  classId     Int
+  class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId   Int
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  termId      Int
+  term        Term     @relation(fields: [termId], references: [id], onDelete: Restrict)
+  grades      Grade[]
+  createdAt   DateTime @default(now())
+
+  @@index([classId, termId])
+}
+
+model Grade {
+  id           Int        @id @default(autoincrement())
+  // Mark in hundredths of a point (12.5/20 -> 1250), null when absent.
+  scoreCents   Int?
+  absent       Boolean    @default(false)
+  evaluationId Int
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  studentId    Int
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([evaluationId, studentId])
+}
+
+// Competency level reached on one surah of the Juz Amma (surahs 78 to 114) for a term.
+model SurahAssessment {
+  id          Int     @id @default(autoincrement())
+  surahNumber Int
+  level       String // NOT_ACQUIRED, IN_PROGRESS, ACQUIRED, MASTERED
+  studentId   Int
+  student     Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId      Int
+  term        Term    @relation(fields: [termId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, termId, surahNumber])
+}
+
+// General appreciation written on a student's report card for a term.
+model ReportRemark {
+  id        Int      @id @default(autoincrement())
+  comment   String
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId    Int
+  term      Term     @relation(fields: [termId], references: [id], onDelete: Restrict)
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, termId])
 }
