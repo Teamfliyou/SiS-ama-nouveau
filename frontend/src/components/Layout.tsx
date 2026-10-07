@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu,
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
   ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer,
-  NotebookPen, Sparkles, FileText, BookMarked, CalendarDays, NotebookText
+  NotebookPen, Sparkles, FileText, BookMarked, CalendarDays, NotebookText, UserPlus
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../utils/api';
@@ -50,6 +50,7 @@ export default function Layout() {
   const navigation = [
     { name: 'Tableau de bord', href: '/dashboard',   icon: LayoutDashboard },
     { name: 'Élèves',          href: '/students',     icon: Users },
+    { name: 'Pré-inscriptions', href: '/pre-registrations', icon: UserPlus },
     { name: 'Classes',         href: '/classes',      icon: BookOpen },
     { name: 'Professeurs',     href: '/teachers',     icon: GraduationCap },
     { name: 'Finances',        href: '/finances',     icon: CreditCard },

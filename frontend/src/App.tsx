@@ -16,6 +16,8 @@ import ReportCards from './pages/ReportCards';
 import SchoolSettings from './pages/SchoolSettings';
 import Timetable from './pages/Timetable';
 import LessonLog from './pages/LessonLog';
+import PreRegistrationForm from './pages/PreRegistrationForm';
+import PreRegistrations from './pages/PreRegistrations';
 import Layout from './components/Layout';
 
 // Protected Route wrapper
@@ -33,12 +35,15 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/setup" element={<Setup />} />
+        {/* Public: online pre-registration form for families */}
+        <Route path="/preinscription" element={<PreRegistrationForm />} />
         
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="classes" element={<Classes />} />
           <Route path="students" element={<Students />} />
+          <Route path="pre-registrations" element={<PreRegistrations />} />
           <Route path="finances" element={<Finances />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="attendance-sheets" element={<AttendanceSheets />} />
