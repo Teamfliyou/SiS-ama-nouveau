@@ -1,3 +1,4 @@
+import { prisma } from '../lib/prisma';
 import { describe, it, beforeEach, expect } from 'vitest';
 import { req, resetDb, adminToken, auth } from './helpers';
 import { formatReference, latestBirthDate } from '../lib/preRegistration';
@@ -207,6 +208,26 @@ describe('pre-registration files (mosque side)', () => {
     expect((await req.delete(`/api/pre-registrations/${second.id}`).set(auth(ctx.token))).status).toBe(200);
     // Deleting a file keeps its students.
     expect((await req.get('/api/students').set(auth(ctx.token))).body).toHaveLength(3);
+  });
+
+  it.each(['2017-03-12', '2018-03-12'])('matches legacy birth dates without merging a different child (%s)', async (dateOfBirth) => {
+    const ctx = await setup();
+    const existing = (await req.post('/api/students').set(auth(ctx.token)).send({
+      firstName: 'Yanis', lastName: 'Benali', dateOfBirth, classId: ctx.classe1,
+    })).body;
+    // Mimic a production row created before the new birthDate column existed.
+    await prisma.student.update({ where: { id: existing.id }, data: { birthDate: null } });
+    await send(file([child(ctx.classe1)]));
+    const dossier = (await req.get('/api/pre-registrations').set(auth(ctx.token))).body.files[0];
+    const validated = await req.post(`/api/pre-registrations/${dossier.id}/validate`).set(auth(ctx.token)).send({
+      children: [{ id: dossier.children[0].id, classId: ctx.classe1 }],
+    });
+    expect(validated.status).toBe(200);
+    expect(validated.body.studentsCreated).toBe(dateOfBirth === '2017-03-12' ? 0 : 1);
+    expect(validated.body.studentsUpdated).toBe(dateOfBirth === '2017-03-12' ? 1 : 0);
+    const studentId = validated.body.file.children[0].studentId;
+    expect(await prisma.enrollment.count({ where: { studentId, classId: ctx.classe1, isActive: true } })).toBe(1);
+    expect((await req.get(`/api/students/${studentId}`).set(auth(ctx.token))).body.dateOfBirth).toBe('2017-03-12');
   });
 
   it('round-trips files, guardians and settings through the JSON backup', async () => {
