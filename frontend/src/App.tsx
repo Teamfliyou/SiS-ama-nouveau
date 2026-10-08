@@ -14,6 +14,8 @@ import Grades from './pages/Grades';
 import Competencies from './pages/Competencies';
 import ReportCards from './pages/ReportCards';
 import SchoolSettings from './pages/SchoolSettings';
+import Timetable from './pages/Timetable';
+import LessonLog from './pages/LessonLog';
 import Layout from './components/Layout';
 
 // Protected Route wrapper
@@ -40,6 +42,8 @@ function App() {
           <Route path="finances" element={<Finances />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="attendance-sheets" element={<AttendanceSheets />} />
+          <Route path="timetable" element={<Timetable />} />
+          <Route path="lessons" element={<LessonLog />} />
           <Route path="import-csv" element={<CsvImport />} />
           <Route path="users" element={<UsersAdmin />} />
           <Route path="teachers" element={<Teachers />} />

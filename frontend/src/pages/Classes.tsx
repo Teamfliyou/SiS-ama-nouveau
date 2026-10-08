@@ -52,7 +52,7 @@ export default function Classes() {
   };
 
   const handleDelete = async (id: number) => {
-    if(!window.confirm("Voulez-vous vraiment supprimer cette classe ? Les élèves associés seront mis en 'Sans classe' et l'historique d'appel (présences) de cette classe sera supprimé.")) return;
+    if(!window.confirm("Voulez-vous vraiment supprimer cette classe ? Les élèves associés seront mis en 'Sans classe'. L'historique d'appel, les évaluations et leurs notes, l'emploi du temps et le cahier de textes de cette classe seront supprimés.")) return;
     try {
       await safeJson(await authFetch(`/api/classes/${id}`, { method: 'DELETE' }));
       toast.success('Classe supprimée');

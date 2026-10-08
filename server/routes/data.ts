@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { asyncHandler } from '../lib/errors';
-import { validate, isRealDateString } from '../lib/validate';
+import { validate, isRealDateString, timeSchema } from '../lib/validate';
 import { normalizeKey, studentKey } from '../lib/dedupe';
 import { eurosToCents } from '../lib/money';
 import { COMPETENCY_LEVELS, SURAH_NUMBERS } from '../lib/juzAmma';
@@ -54,6 +54,21 @@ const attendanceDateSchema = z
   .string()
   .max(40)
   .refine((v) => isRealDateString(v), { message: 'Date invalide (attendu YYYY-MM-DD)' });
+
+const nullableText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((v) => v || null);
+
+// Teacher referenced by a course or a session: matched by email, else by name.
+const teacherRefSchema = z
+  .object({ firstName: z.string(), lastName: z.string(), email: z.string().nullable().optional() })
+  .nullable()
+  .optional();
 
 const importPayloadSchema = z.object({
   version: z.string().optional(),
@@ -194,7 +209,48 @@ const importPayloadSchema = z.object({
     )
     .max(MAX_ITEMS)
     .optional(),
+  timetableSlots: z
+    .array(
+      z.object({
+        id: z.number().int().optional(),
+        dayOfWeek: z.number().int().min(1).max(7),
+        startTime: timeSchema,
+        endTime: timeSchema,
+        label: nullableText(80),
+        room: nullableText(40),
+        class: z.object({ name: z.string() }),
+        subject: z.object({ name: z.string() }).nullable().optional(),
+        teacher: teacherRefSchema,
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
+  lessons: z
+    .array(
+      z.object({
+        date: attendanceDateSchema,
+        startTime: timeSchema.nullable().optional(),
+        endTime: timeSchema.nullable().optional(),
+        label: nullableText(80),
+        content: nullableText(5000),
+        homework: nullableText(2000),
+        homeworkDueDate: attendanceDateSchema.nullable().optional(),
+        slotId: z.number().int().nullable().optional(),
+        class: z.object({ name: z.string() }),
+        subject: z.object({ name: z.string() }).nullable().optional(),
+        teacher: teacherRefSchema,
+      })
+    )
+    .max(MAX_ITEMS * 4)
+    .optional(),
 });
+
+// Names used to match the class, subject and teacher of a course or session on restore.
+const scheduleRefs = {
+  class: { select: { name: true } },
+  subject: { select: { name: true } },
+  teacher: { select: { firstName: true, lastName: true, email: true } },
+} as const;
 
 // GET /api/export — full JSON backup. Never includes passwords, tokens or secrets.
 router.get(
@@ -214,6 +270,8 @@ router.get(
       evaluations,
       surahAssessments,
       reportRemarks,
+      timetableSlots,
+      lessons,
     ] = await Promise.all([
       prisma.class.findMany({ orderBy: { name: 'asc' } }),
       prisma.student.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } }),
@@ -234,6 +292,11 @@ router.get(
       }),
       prisma.surahAssessment.findMany({ include: { term: { select: { name: true } } } }),
       prisma.reportRemark.findMany({ include: { term: { select: { name: true } } } }),
+      prisma.timetableSlot.findMany({
+        include: scheduleRefs,
+        orderBy: [{ classId: 'asc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
+      }),
+      prisma.lesson.findMany({ include: scheduleRefs, orderBy: [{ date: 'asc' }, { id: 'asc' }] }),
     ]);
     res.setHeader(
       'Content-Disposition',
@@ -241,7 +304,7 @@ router.get(
     );
     res.json({
       exportDate: new Date().toISOString(),
-      version: '3',
+      version: '4',
       classes,
       students,
       teachers,
@@ -253,6 +316,8 @@ router.get(
       evaluations,
       surahAssessments,
       reportRemarks,
+      timetableSlots,
+      lessons,
     });
   })
 );
@@ -279,6 +344,8 @@ router.post(
       evaluations = [],
       surahAssessments = [],
       reportRemarks = [],
+      timetableSlots = [],
+      lessons = [],
     } = payload;
 
     const counts = await prisma.$transaction(async (tx) => {
@@ -519,10 +586,91 @@ router.post(
         skipDuplicates: true,
       });
 
+      // ─── Timetables and cahier de textes (v4 backups) ────────────────
+      // A course is matched by class, day and times; a logged session by class,
+      // date and course (or, outside the timetable, by activity and time).
+      const teacherIds = new Map<string, number>();
+      for (const t of await tx.teacher.findMany({ select: { id: true, firstName: true, lastName: true, email: true } })) {
+        if (t.email) teacherIds.set(normalizeKey(t.email), t.id);
+        const nameKey = studentKey(t.firstName, t.lastName);
+        if (!teacherIds.has(nameKey)) teacherIds.set(nameKey, t.id);
+      }
+      const resolveTeacherId = (ref?: { firstName: string; lastName: string; email?: string | null } | null): number | null =>
+        ref
+          ? (ref.email ? teacherIds.get(normalizeKey(ref.email)) : undefined) ??
+            teacherIds.get(studentKey(ref.firstName, ref.lastName)) ??
+            null
+          : null;
+      const resolveSubjectId = (ref?: { name: string } | null): number | null =>
+        ref ? subjectMap.get(normalizeKey(ref.name)) ?? null : null;
+
+      let timetableSlotsCreated = 0;
+      const slotMap = new Map<number, number>(); // original course id -> id in this database
+      for (const s of timetableSlots) {
+        const classId = resolveClassId(s.class.name);
+        const subjectId = resolveSubjectId(s.subject);
+        if (classId === null || (s.subject && subjectId === null) || (subjectId === null && !s.label)) continue;
+        const existing = await tx.timetableSlot.findFirst({
+          where: { classId, dayOfWeek: s.dayOfWeek, startTime: s.startTime, endTime: s.endTime },
+        });
+        const slotId =
+          existing?.id ??
+          (
+            await tx.timetableSlot.create({
+              data: {
+                classId,
+                dayOfWeek: s.dayOfWeek,
+                startTime: s.startTime,
+                endTime: s.endTime,
+                subjectId,
+                label: s.label,
+                room: s.room,
+                teacherId: resolveTeacherId(s.teacher),
+              },
+            })
+          ).id;
+        if (!existing) timetableSlotsCreated++;
+        if (s.id !== undefined) slotMap.set(s.id, slotId);
+      }
+
+      let lessonsCreated = 0;
+      for (const l of lessons) {
+        const classId = resolveClassId(l.class.name);
+        const subjectId = resolveSubjectId(l.subject);
+        if (classId === null || (l.subject && subjectId === null) || (!l.content && !l.homework)) continue;
+        const slotId = l.slotId !== null && l.slotId !== undefined ? slotMap.get(l.slotId) ?? null : null;
+        const startTime = l.startTime ?? null;
+        const duplicate = await tx.lesson.findFirst({
+          where:
+            slotId !== null
+              ? { classId, date: l.date, slotId }
+              : { classId, date: l.date, slotId: null, subjectId, label: l.label, startTime },
+        });
+        if (duplicate) continue;
+        await tx.lesson.create({
+          data: {
+            classId,
+            date: l.date,
+            slotId,
+            subjectId,
+            label: l.label,
+            startTime,
+            endTime: l.endTime ?? null,
+            teacherId: resolveTeacherId(l.teacher),
+            content: l.content,
+            homework: l.homework,
+            homeworkDueDate: l.homework ? l.homeworkDueDate ?? null : null,
+          },
+        });
+        lessonsCreated++;
+      }
+
       return {
         success: true,
         gradesCreated,
         competenciesCreated,
+        timetableSlotsCreated,
+        lessonsCreated,
         classesCreated,
         studentsCreated,
         teachersCreated,
