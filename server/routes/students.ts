@@ -42,9 +42,25 @@ type StudentRow = {
   wasEnrolled2025_2026: boolean | null;
   arabicCourse: string | null;
   quranCourse: string | null;
+  birthDate: string | null;
+  gender: string | null;
+  medicalInfo: string | null;
+  photoOptOut: boolean;
+  canLeaveAlone: boolean;
   classId: number | null;
   familyId: number | null;
   createdAt: Date;
+  guardians?: {
+    id: number;
+    relationship: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string;
+    address: string | null;
+    profession: string | null;
+    volunteer: boolean;
+  }[];
   class: { id: number; name: string; tuitionFeeCents: number } | null;
   family?: {
     id: number;
@@ -98,6 +114,22 @@ const mapStudent = (s: StudentRow) => {
     wasEnrolled2025_2026: s.wasEnrolled2025_2026,
     arabicCourse: s.arabicCourse,
     quranCourse: s.quranCourse,
+    birthDate: s.birthDate ?? (s.dateOfBirth ? toYmd(s.dateOfBirth) : null),
+    gender: s.gender,
+    medicalInfo: s.medicalInfo,
+    photoOptOut: s.photoOptOut,
+    canLeaveAlone: s.canLeaveAlone,
+    guardians: (s.guardians ?? []).map((g) => ({
+      id: g.id,
+      relationship: g.relationship,
+      firstName: g.firstName,
+      lastName: g.lastName,
+      phone: g.phone,
+      email: g.email,
+      address: g.address,
+      profession: g.profession,
+      volunteer: g.volunteer,
+    })),
     classId: s.classId,
     familyId: s.familyId,
     createdAt: s.createdAt,
@@ -150,6 +182,7 @@ const mapStudent = (s: StudentRow) => {
 };
 
 const studentInclude = {
+  guardians: { orderBy: { id: 'asc' } },
   class: true,
   family: { select: { id: true, name: true, phone: true, email: true, address: true } },
   payments: true,
@@ -227,6 +260,7 @@ router.post(
           lastName,
           phone: parent?.phone ?? phone,
           dateOfBirth: dateOfBirth ? ymdToDate(dateOfBirth) : null,
+          birthDate: dateOfBirth ?? null,
           wasEnrolled2025_2026,
           arabicCourse,
           quranCourse,
@@ -297,6 +331,7 @@ router.put(
           lastName,
           phone: parent?.phone ?? phone,
           dateOfBirth: dateOfBirth ? ymdToDate(dateOfBirth) : null,
+          birthDate: dateOfBirth ?? null,
           wasEnrolled2025_2026,
           arabicCourse,
           quranCourse,

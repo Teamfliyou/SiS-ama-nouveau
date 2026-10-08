@@ -1,3 +1,4 @@
+import StudentRegistrationDetails from '../../components/StudentRegistrationDetails';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -461,6 +462,8 @@ export default function LiquidStudents() {
                 </div>
               </div>
             </div>
+
+            <div className="lg-student-profile-card"><StudentRegistrationDetails student={detail} /></div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="lg-stat text-center">

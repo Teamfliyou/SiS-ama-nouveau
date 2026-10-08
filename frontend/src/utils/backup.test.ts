@@ -84,7 +84,7 @@ describe('buildBackupFilename', () => {
   it('builds the canonical filename with zero-padding', () => {
     const date = new Date(2026, 8, 13, 18, 30); // 13 septembre 2026 18:30
     expect(buildBackupFilename(date, CURRENT_BACKUP_FORMAT_VERSION)).toBe(
-      'SiS-AMA-backup-2026-09-13-18-30-v3.json'
+      'SiS-AMA-backup-2026-09-13-18-30-v5.json'
     );
   });
 });

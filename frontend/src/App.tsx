@@ -15,6 +15,10 @@ import Grades from './pages/Grades';
 import Competencies from './pages/Competencies';
 import ReportCards from './pages/ReportCards';
 import SchoolSettings from './pages/SchoolSettings';
+import Timetable from './pages/Timetable';
+import LessonLog from './pages/LessonLog';
+import PreRegistrationForm from './pages/PreRegistrationForm';
+import PreRegistrations from './pages/PreRegistrations';
 import Layout from './components/Layout';
 import ThemedPage from './components/ThemedPage';
 
@@ -44,6 +48,7 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/setup" element={<Setup />} />
+        <Route path="/preinscription" element={<PreRegistrationForm />} />
 
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
@@ -58,6 +63,9 @@ function App() {
           <Route path="teachers" element={<ThemedPage classic={Teachers} liquid={LiquidTeachers} />} />
           <Route path="settings" element={<ThemedPage classic={Settings} liquid={LiquidSettings} />} />
           {/* Scolarité : même page dans les deux apparences (le layout Liquid l'habille). */}
+          <Route path="pre-registrations" element={<PreRegistrations />} />
+          <Route path="timetable" element={<Timetable />} />
+          <Route path="lessons" element={<LessonLog />} />
           <Route path="grades" element={<Grades />} />
           <Route path="competencies" element={<Competencies />} />
           <Route path="report-cards" element={<ReportCards />} />

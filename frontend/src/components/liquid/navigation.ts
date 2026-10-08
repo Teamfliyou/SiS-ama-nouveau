@@ -1,4 +1,7 @@
 import {
+  CalendarDays,
+  NotebookText,
+  UserPlus,
   BookMarked,
   BookOpen,
   ClipboardList,
@@ -26,6 +29,7 @@ export function buildNavigation(isAdmin: boolean): NavGroup[] {
     {
       label: 'Gestion',
       items: [
+        { name: 'Pré-inscriptions', href: '/pre-registrations', icon: UserPlus },
         { name: 'Élèves', href: '/students', icon: Users },
         { name: 'Classes', href: '/classes', icon: BookOpen },
         { name: 'Professeurs', href: '/teachers', icon: GraduationCap },
@@ -42,6 +46,8 @@ export function buildNavigation(isAdmin: boolean): NavGroup[] {
     {
       label: 'Scolarité',
       items: [
+        { name: 'Emploi du temps', href: '/timetable', icon: CalendarDays },
+        { name: 'Cahier de textes', href: '/lessons', icon: NotebookText },
         { name: 'Notes', href: '/grades', icon: NotebookPen },
         { name: 'Juz Amma', href: '/competencies', icon: Sparkles },
         { name: 'Bulletins', href: '/report-cards', icon: FileText },
@@ -78,6 +84,9 @@ export const PAGE_TITLES: Record<string, string> = {
   '/attendance': 'Appel',
   '/attendance-sheets': "Feuilles d'appel",
   '/finances': 'Finances',
+  '/timetable': 'Emploi du temps',
+  '/lessons': 'Cahier de textes',
+  '/pre-registrations': 'Pré-inscriptions',
   '/grades': 'Notes',
   '/competencies': 'Juz Amma',
   '/report-cards': 'Bulletins',

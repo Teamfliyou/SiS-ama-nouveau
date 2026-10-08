@@ -25,7 +25,7 @@
  * anciennes représentations (euros/cents, `class: { name }`, etc.).
  */
 
-export const CURRENT_BACKUP_FORMAT_VERSION = 3;
+export const CURRENT_BACKUP_FORMAT_VERSION = 5;
 
 /** Collections métier reconnues, dans l'ordre de restauration logique. */
 export const BACKUP_COLLECTIONS = [
@@ -43,6 +43,10 @@ export const BACKUP_COLLECTIONS = [
   'evaluations',
   'surahAssessments',
   'reportRemarks',
+  'timetableSlots',
+  'lessons',
+  'guardians',
+  'preRegistrations',
 ] as const;
 
 export type BackupCollection = (typeof BACKUP_COLLECTIONS)[number];
@@ -71,6 +75,7 @@ export function detectBackupVersion(raw: unknown): number {
 function extractCollections(source: Dict): Dict {
   const out: Dict = {};
   for (const key of BACKUP_COLLECTIONS) out[key] = asArray(source[key]);
+  out.registrationSettings = isRecord(source.registrationSettings) ? source.registrationSettings : null;
   return out;
 }
 

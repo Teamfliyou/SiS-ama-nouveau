@@ -14,6 +14,9 @@
 - **Notes** : Matières avec coefficient, périodes (trimestres), évaluations par classe (barème et coefficient libres) et saisie des notes en grille, absences comprises.
 - **Compétences Juz Amma** : Niveau atteint sur chacune des 37 sourates (An-Naba' à An-Nas) par élève et par période : non acquis, en cours, acquis, maîtrisé. Le niveau de la période précédente est rappelé.
 - **Bulletins** : Bulletin par élève ou pour toute la classe (un par page à l'impression) avec moyennes par matière ramenées sur 20, moyenne générale pondérée, moyenne/min/max de la classe, rang, mention, compétences du Juz Amma, absences et retards de la période et appréciation générale.
+- **Emplois du temps** : Cours de chaque semaine par classe (jour, horaires, matière ou activité libre comme le Coran, professeur, salle), consultables aussi par professeur et imprimables. Un cours qui chevauche un autre cours de la classe, ou un professeur déjà en cours dans une autre classe, est refusé.
+- **Cahier de textes** : Contenu de chaque séance et travail à faire pour la séance suivante. La séance reprend le cours de l'emploi du temps et la date « pour le » est proposée d'après la prochaine séance. Onglet « Travail à faire » regroupé par date, imprimable et copiable en un message pour les familles (WhatsApp, SMS).
+- **Pré-inscriptions en ligne** : Formulaire public `/preinscription` (sans compte) pour les familles : enfants (date de naissance, genre, classe et créneau, informations médicales, refus des photos, autorisation de rentrer seul), un ou deux responsables, récapitulatif avec la cotisation (réduction famille comprise) et les moyens de paiement, règlement intérieur, attestation sur l'honneur et mention RGPD. Âge minimum et places par classe contrôlés (au-delà : liste d'attente). Chaque dossier reçoit un numéro (PI-2026-0001) et un email de confirmation (Brevo ; simulé sans clé). Côté mosquée, la page « Pré-inscriptions » permet de traiter les dossiers (liste d'attente, refus, validation qui crée les élèves et leurs responsables sans doublon) et de régler le formulaire (ouverture, âge, classes proposées, places, HelloAsso, règlement).
 - **Import CSV** : Import en masse des élèves depuis un fichier CSV.
 - **Dashboard Dynamique** : Vue d'ensemble en temps réel des indicateurs clés (élèves, classes, revenus).
 
@@ -42,11 +45,15 @@
 | Évaluations et notes | `GET/POST /api/evaluations`, `PUT/DELETE /api/evaluations/:id`, `GET/PUT /api/evaluations/:id/grades` |
 | Compétences Juz Amma | `GET /api/competencies/juz-amma`, `GET/PUT /api/competencies` |
 | Bulletins | `GET /api/report-cards?classId=&termId=[&studentId=]`, `PUT /api/report-cards/remark` |
+| Emplois du temps | `GET /api/timetable?classId=` ou `?teacherId=`, `POST /api/timetable`, `PUT/DELETE /api/timetable/:id` |
+| Cahier de textes | `GET /api/lessons?classId=[&from=&to=]`, `GET /api/lessons/homework?from=[&classId=]`, `POST /api/lessons`, `PUT/DELETE /api/lessons/:id` |
+| Pré-inscriptions (public, sans compte) | `GET/POST /api/public/registration` |
+| Pré-inscriptions (mosquée) | `GET /api/pre-registrations[?status=]`, `GET/PUT /api/pre-registrations/settings`, `PUT /api/pre-registrations/classes/:id`, `PUT /api/pre-registrations/:id/status`, `POST /api/pre-registrations/:id/validate`, `POST /api/pre-registrations/:id/resend-email`, `DELETE /api/pre-registrations/:id` |
 | Import CSV | `POST /api/import-csv/students`, `POST /api/import-csv/teachers` |
 | Sauvegardes | `GET /api/export`, `POST /api/import/full` |
 | Statistiques | `GET /api/stats` |
 
-Toutes les routes (hors login et bootstrap initial) nécessitent un token JWT via l'en-tête `Authorization: Bearer <token>`.
+Toutes les routes (hors login, bootstrap initial et formulaire public de pré-inscription) nécessitent un token JWT via l'en-tête `Authorization: Bearer <token>`.
 
 > 📁 Données : un élève garde un **historique d'inscriptions** (classes suivies,
 > automatique à chaque changement de classe), un professeur peut être affecté à

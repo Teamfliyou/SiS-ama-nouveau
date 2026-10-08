@@ -1,3 +1,4 @@
+import { assertTestDatabaseUrl } from '../lib/testDatabase';
 import request from 'supertest';
 import bcrypt from 'bcrypt';
 import { createApp } from '../lib/app';
@@ -50,8 +51,14 @@ export async function adminSession(): Promise<{ token: string; id: number }> {
 
 /** Empties all tables (FK-safe order). Called before each test. */
 export async function resetDb() {
+  assertTestDatabaseUrl(process.env.DATABASE_URL ?? '');
   await prisma.teacherClass.deleteMany();
   await prisma.enrollment.deleteMany();
+  await prisma.preRegistration.deleteMany();
+  await prisma.guardian.deleteMany();
+  await prisma.registrationSettings.deleteMany();
+  await prisma.lesson.deleteMany();
+  await prisma.timetableSlot.deleteMany();
   await prisma.grade.deleteMany();
   await prisma.evaluation.deleteMany();
   await prisma.surahAssessment.deleteMany();

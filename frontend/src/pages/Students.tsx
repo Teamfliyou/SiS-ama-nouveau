@@ -28,6 +28,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import Sheet from '../components/mobile/Sheet';
 import ActionMenu from '../components/mobile/ActionMenu';
 import { mList, mInput, mAddBtn, mPrimaryBtn } from '../components/mobile/styles';
+import StudentRegistrationDetails from '../components/StudentRegistrationDetails';
 
 const EMPTY_FORM: StudentInput = {
   firstName: '',
@@ -559,6 +560,9 @@ export default function Students() {
                 </section>
               </div>
 
+              <StudentRegistrationDetails student={detailsStudent} />
+
+              {/* Financial summary */}
               <div className="grid grid-cols-3 gap-3 mobile:gap-2">
                 <div className="bg-slate-50 rounded-xl p-3 text-center">
                   <p className="text-xs font-semibold text-slate-400 uppercase">Total dû</p>

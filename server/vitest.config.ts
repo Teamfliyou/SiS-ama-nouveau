@@ -26,6 +26,7 @@ export default defineConfig({
       LOGIN_RATE_MAX: '5',
       LOGIN_RATE_WINDOW_MS: '60000',
       RATE_MAX_GENERAL: '100000',
+      PUBLIC_FORM_RATE_MAX: '100000',
       NODE_ENV: 'test',
     },
   },

@@ -43,18 +43,22 @@ router.put(
   })
 );
 
-// DELETE /api/subjects/:id — refused while marks exist, so no grade is ever lost silently.
+// DELETE /api/subjects/:id — refused while marks, courses or logged sessions use it,
+// so nothing is ever lost silently.
 router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de matière invalide');
     const existing = await prisma.subject.findUnique({
       where: { id },
-      include: { _count: { select: { evaluations: true } } },
+      include: { _count: { select: { evaluations: true, timetableSlots: true, lessons: true } } },
     });
     if (!existing) throw new AppError(404, 'Matière introuvable');
     if (existing._count.evaluations > 0) {
       throw new AppError(409, 'Cette matière a des évaluations : supprimez-les avant de supprimer la matière');
+    }
+    if (existing._count.timetableSlots > 0 || existing._count.lessons > 0) {
+      throw new AppError(409, "Cette matière est utilisée dans l'emploi du temps ou le cahier de textes");
     }
     await prisma.subject.delete({ where: { id } });
     res.json({ success: true });

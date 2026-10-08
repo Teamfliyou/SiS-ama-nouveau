@@ -309,7 +309,7 @@ describe('report cards', () => {
       .send({ studentId: ctx.students[0].id, termId: ctx.termId, levels: [{ surahNumber: 108, level: 'MASTERED' }] });
 
     const backup = (await req.get('/api/export').set(auth(ctx.token))).body;
-    expect(backup.version).toBe('3');
+    expect(backup.version).toBe('5');
     await resetDb();
     const token = await adminToken();
     const restored = await req.post('/api/import/full').set(auth(token)).send(backup);

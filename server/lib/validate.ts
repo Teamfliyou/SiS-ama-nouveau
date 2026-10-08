@@ -106,6 +106,18 @@ export const roleUpdateSchema = z.object({
   role: roleSchema,
 });
 
+/** Optional DB id. HTML selects send it as text ("3"), so numeric strings are accepted; '' means none. */
+const optionalIdSchema = (message: string) =>
+  z.preprocess(
+    (v) => (typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : v),
+    z
+      .union([z.number().int().positive(message), z.null(), z.literal('')])
+      .nullable()
+      .optional()
+      .transform((v) => (v === '' || v === null || v === undefined ? null : v as number))
+  );
+
+
 export const classCreateSchema = z.object({
   name: nameField('Le nom de la classe', 120),
   tuitionFee: euroAmount(0, 'Les frais de scolarité').optional(),
@@ -336,6 +348,143 @@ export const reportRemarkSchema = z.object({
   studentId: z.number().int().positive('Élève invalide'),
   termId: z.number().int().positive('Période invalide'),
   comment: z.string().trim().max(1000, 'Appréciation trop longue (max 1000)'),
+});
+
+// ─── Timetable and lesson log (cahier de textes) ─────────────────────
+
+export const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "L'heure doit être au format HH:MM");
+
+/** Empty string or null -> null, otherwise must match `schema`. */
+const optionalOf = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (v === '' || v === undefined ? null : v), schema.nullable());
+
+export const timetableSlotSchema = z
+  .object({
+    classId: z.number().int().positive('Classe invalide'),
+    dayOfWeek: z.number('Jour invalide').int('Jour invalide').min(1, 'Jour invalide').max(7, 'Jour invalide'),
+    startTime: timeSchema,
+    endTime: timeSchema,
+    subjectId: optionalIdSchema('Matière invalide'),
+    label: optionalTextField("L'activité", 80),
+    teacherId: optionalIdSchema('Professeur invalide'),
+    room: optionalTextField('La salle', 40),
+  })
+  .refine((s) => s.startTime < s.endTime, { message: "L'heure de fin doit suivre l'heure de début" })
+  .refine((s) => s.subjectId !== null || s.label !== null, { message: 'Choisissez une matière ou indiquez une activité' });
+
+export const lessonSchema = z
+  .object({
+    classId: z.number().int().positive('Classe invalide'),
+    date: dateStringSchema,
+    // Course of the timetable this session belongs to; null for a session outside the timetable.
+    slotId: optionalIdSchema('Créneau invalide'),
+    // Used only without slotId (otherwise copied from the slot).
+    subjectId: optionalIdSchema('Matière invalide'),
+    label: optionalTextField("L'activité", 80),
+    startTime: optionalOf(timeSchema),
+    endTime: optionalOf(timeSchema),
+    teacherId: optionalIdSchema('Professeur invalide'),
+    content: optionalTextField('Le contenu de la séance', 5000),
+    homework: optionalTextField('Le travail à faire', 2000),
+    homeworkDueDate: optionalOf(dateStringSchema),
+  })
+  .refine((l) => l.content !== null || l.homework !== null, {
+    message: 'Renseignez le contenu de la séance ou le travail à faire',
+  })
+  .refine((l) => l.homework === null || l.homeworkDueDate !== null, {
+    message: 'Indiquez pour quand le travail est à faire',
+  })
+  .refine((l) => l.homework === null || l.homeworkDueDate === null || l.homeworkDueDate >= l.date, {
+    message: 'Le travail ne peut pas être à faire avant la séance',
+  })
+  .refine((l) => l.startTime === null || l.endTime === null || l.startTime < l.endTime, {
+    message: "L'heure de fin doit suivre l'heure de début",
+  });
+
+// ─── Online pre-registration ──────────────────────────────────────────
+
+const phoneSchema = z
+  .string('Téléphone requis')
+  .trim()
+  .min(6, 'Téléphone invalide')
+  .max(30, 'Téléphone trop long')
+  .regex(/^[0-9+().\s-]+$/, 'Téléphone invalide');
+
+const preRegistrationChildSchema = z.object({
+  firstName: nameField("Le prénom de l'enfant", 80),
+  lastName: nameField("Le nom de l'enfant", 80),
+  birthDate: dateStringSchema,
+  gender: z.enum(['F', 'M'], { message: 'Indiquez si votre enfant est une fille ou un garçon' }),
+  firstEnrollment: z.boolean(),
+  classId: z.number('Choisissez une classe').int('Choisissez une classe').positive('Choisissez une classe'),
+  medicalInfo: optionalTextField('Les informations médicales', 1000),
+  photoOptOut: z.boolean().default(false),
+  canLeaveAlone: z.boolean().default(false),
+});
+
+const preRegistrationGuardianSchema = z.object({
+  relationship: nameField('Le lien de parenté', 40),
+  firstName: nameField('Le prénom du responsable', 80),
+  lastName: nameField('Le nom du responsable', 80),
+  phone: phoneSchema,
+  email: emailSchema,
+  address: optionalTextField("L'adresse", 200),
+  profession: optionalTextField('La profession', 80),
+  volunteer: z.boolean().default(false),
+});
+
+export const preRegistrationSchema = z
+  .object({
+    children: z
+      .array(preRegistrationChildSchema)
+      .min(1, 'Ajoutez au moins un enfant')
+      .max(8, 'Huit enfants au maximum par dossier'),
+    guardians: z
+      .array(preRegistrationGuardianSchema)
+      .min(1, 'Indiquez un responsable')
+      .max(2, 'Deux responsables au maximum'),
+    rulesAccepted: z.literal(true, { message: 'Vous devez accepter le règlement intérieur' }),
+    honorAttested: z.literal(true, { message: "Vous devez attester sur l'honneur l'exactitude des informations" }),
+    // Honeypot: hidden from people, only bots fill it.
+    website: z.string().max(0, 'Requête invalide').optional(),
+  })
+  .refine((p) => p.guardians[0].address !== null, { message: "Indiquez l'adresse du responsable" });
+
+export const registrationSettingsSchema = z.object({
+  isOpen: z.boolean(),
+  schoolYear: z.string().trim().regex(/^\d{4}-\d{4}$/, "L'année scolaire doit être au format 2026-2027"),
+  minAge: smallInt("L'âge minimum", 0, 18),
+  ageReferenceDate: dateStringSchema,
+  contactEmail: optionalEmailSchema,
+  helloAssoUrl: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+    z
+      .url('Lien HelloAsso invalide')
+      .max(500, 'Lien trop long')
+      .refine((v) => v.startsWith('https://'), { message: 'Le lien HelloAsso doit commencer par https://' })
+      .nullable()
+      .optional()
+      .transform((v) => v ?? null)
+  ),
+  rulesText: z.string().trim().min(1, 'Le règlement intérieur ne peut pas être vide').max(20_000, 'Règlement trop long'),
+});
+
+export const classRegistrationSchema = z.object({
+  openForRegistration: z.boolean(),
+  scheduleLabel: optionalTextField('Le créneau', 80),
+  capacity: z.number('Nombre de places invalide').int('Nombre de places invalide').min(1, 'Au moins une place').max(500, 'Trop de places').nullable(),
+});
+
+export const preRegistrationStatusSchema = z.object({
+  status: z.enum(['NEW', 'WAITLIST', 'REFUSED'], { message: 'Statut invalide' }),
+  adminNote: optionalTextField('La note', 1000),
+});
+
+export const preRegistrationValidateSchema = z.object({
+  // Class given to each child (null: enrolled without a class for now).
+  children: z
+    .array(z.object({ id: z.number().int().positive(), classId: z.number().int().positive().nullable() }))
+    .min(1, 'Aucun enfant à inscrire'),
 });
 
 // ─── Middleware ───────────────────────────────────────────────────────

@@ -33,7 +33,7 @@ describe('canonical v3 export', () => {
     const res = await req.get('/api/export').set(auth(token));
     expect(res.status).toBe(200);
     expect(res.body.application).toBe('SiS AMA');
-    expect(res.body.backupFormatVersion).toBe(3);
+    expect(res.body.backupFormatVersion).toBe(5);
     expect(typeof res.body.createdAt).toBe('string');
     expect(res.body.data).toBeTruthy();
     expect(res.body.data.classes).toHaveLength(1);
@@ -44,7 +44,7 @@ describe('canonical v3 export', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/password/i);
     expect(JSON.stringify(res.body)).not.toMatch(/token/i);
     // Nom de fichier canonique.
-    expect(res.headers['content-disposition']).toMatch(/SiS-AMA-backup-.*-v3\.json/);
+    expect(res.headers['content-disposition']).toMatch(/SiS-AMA-backup-.*-v5\.json/);
   });
 
   it('is restorable as-is (round trip through the data wrapper)', async () => {

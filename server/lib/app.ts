@@ -23,6 +23,10 @@ import termRoutes from '../routes/terms';
 import evaluationRoutes from '../routes/evaluations';
 import competencyRoutes from '../routes/competencies';
 import reportCardRoutes from '../routes/reportCards';
+import timetableRoutes from '../routes/timetable';
+import lessonRoutes from '../routes/lessons';
+import publicRegistrationRoutes from '../routes/publicRegistration';
+import preRegistrationRoutes from '../routes/preRegistrations';
 import { getJwtSecret } from './secret';
 
 /** Fails fast on a missing/weak JWT secret. Never rely on a default value. */
@@ -68,6 +72,8 @@ export function createApp(): Express {
   // Public bootstrap must be mounted early.
   app.use('/api/health', healthRoutes);
   app.use('/api/setup', setupRoutes);
+  // Online pre-registration form used by families (no account).
+  app.use('/api/public/registration', publicRegistrationRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/classes', classRoutes);
@@ -80,6 +86,9 @@ export function createApp(): Express {
   app.use('/api/evaluations', evaluationRoutes);
   app.use('/api/competencies', competencyRoutes);
   app.use('/api/report-cards', reportCardRoutes);
+  app.use('/api/timetable', timetableRoutes);
+  app.use('/api/lessons', lessonRoutes);
+  app.use('/api/pre-registrations', preRegistrationRoutes);
   app.use('/api/import-csv', importCsvRoutes);
   app.use('/api', dataRoutes); // /api/export, /api/import/full
   app.use('/api/stats', statsRoutes);

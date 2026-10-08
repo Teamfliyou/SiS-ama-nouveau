@@ -204,7 +204,7 @@ describe('full v3 export -> import round trip', () => {
   it('restores every entity on an empty database', async () => {
     const token = await adminToken();
     const backup = await buildBackup(token);
-    expect(backup.version).toBe('3');
+    expect(backup.version).toBe('5');
     expect(backup.data.schoolYears).toHaveLength(1);
     expect(backup.data.families).toHaveLength(1);
     expect(backup.data.enrollments).toHaveLength(1);

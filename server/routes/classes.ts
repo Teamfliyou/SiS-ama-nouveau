@@ -111,8 +111,8 @@ router.put(
 // DELETE /api/classes/:id
 // Deletion behaviour (documented): students are unassigned (Student.classId -> null),
 // teacher assignments are cleared (Teacher.classId -> null), and the attendance
-// history of that class is removed (Attendance.classId cascade). This matches the
-// confirmation message shown in the UI.
+// history, evaluations (with their marks), timetable and cahier de textes of that
+// class are removed (cascade). This matches the confirmation message shown in the UI.
 router.delete(
   '/:id',
   asyncHandler(async (req, res) => {

@@ -12,7 +12,7 @@
  * backend (`server/lib/backup.ts`) : c'est la frontière de sécurité.
  */
 
-export const CURRENT_BACKUP_FORMAT_VERSION = 3;
+export const CURRENT_BACKUP_FORMAT_VERSION = 5;
 export const BACKUP_HISTORY_KEY = 'sis-backup-history';
 const HISTORY_LIMIT = 20;
 
@@ -25,6 +25,17 @@ export type BackupCollections = {
   payments: unknown[];
   attendances: unknown[];
   enrollments: unknown[];
+  paymentGroups: unknown[];
+  subjects: unknown[];
+  terms: unknown[];
+  evaluations: unknown[];
+  surahAssessments: unknown[];
+  reportRemarks: unknown[];
+  timetableSlots: unknown[];
+  lessons: unknown[];
+  guardians: unknown[];
+  preRegistrations: unknown[];
+  registrationSettings: Record<string, unknown> | null;
 };
 
 export type ParsedBackup = {
@@ -85,6 +96,17 @@ export function parseBackup(input: unknown): ParsedBackup {
       payments: asArray(source.payments),
       attendances: asArray(source.attendances),
       enrollments: asArray(source.enrollments),
+      paymentGroups: asArray(source.paymentGroups),
+      subjects: asArray(source.subjects),
+      terms: asArray(source.terms),
+      evaluations: asArray(source.evaluations),
+      surahAssessments: asArray(source.surahAssessments),
+      reportRemarks: asArray(source.reportRemarks),
+      timetableSlots: asArray(source.timetableSlots),
+      lessons: asArray(source.lessons),
+      guardians: asArray(source.guardians),
+      preRegistrations: asArray(source.preRegistrations),
+      registrationSettings: isRecord(source.registrationSettings) ? source.registrationSettings : null,
     },
   };
 }

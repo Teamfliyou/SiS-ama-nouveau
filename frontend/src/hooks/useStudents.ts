@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { Guardian } from '../utils/preRegistration';
 import { authFetch, safeJson } from '../utils/api';
 
 export type Payment = {
@@ -26,6 +27,12 @@ export type Student = {
   firstName: string;
   lastName: string;
   phone: string | null;
+  birthDate: string | null;
+  gender: 'F' | 'M' | null;
+  medicalInfo: string | null;
+  photoOptOut: boolean;
+  canLeaveAlone: boolean;
+  guardians: Guardian[];
   dateOfBirth: string | null;
   ageInOctober2026: number | null;
   wasEnrolled2025_2026: boolean | null;
