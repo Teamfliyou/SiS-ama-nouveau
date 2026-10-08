@@ -61,6 +61,7 @@ model Class {
   teachers        Teacher[]
   teacherClasses  TeacherClass[]
   enrollments     Enrollment[]
+  evaluations     Evaluation[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -84,6 +85,9 @@ model Student {
   payments    Payment[]
   attendances Attendance[]
   enrollments Enrollment[]
+  grades        Grade[]
+  surahLevels   SurahAssessment[]
+  reportRemarks ReportRemark[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -93,19 +97,39 @@ model Student {
 }
 
 model Payment {
-  id          Int           @id @default(autoincrement())
-  amountCents Int
-  date        DateTime      @default(now())
-  studentId   Int
-  student     Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  method      PaymentMethod @default(CASH)
-  reference   String?
-  note        String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id            Int           @id @default(autoincrement())
+  amountCents   Int
+  // Part of the family discount credited to this student (0 for an individual payment).
+  // The amount still due is tuition - amountCents - discountCents.
+  discountCents Int           @default(0)
+  date          DateTime      @default(now())
+  studentId     Int
+  student       Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  method        PaymentMethod @default(CASH)
+  reference     String?
+  note          String?
+  // Set when the payment line belongs to a multi-child (grouped) payment.
+  groupId       Int?
+  group         PaymentGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   @@index([studentId])
   @@index([date])
+  @@index([groupId])
+}
+
+// One transaction settling several children at once. Each child keeps its own
+// Payment line (linked through groupId) so balances keep working per student.
+model PaymentGroup {
+  id            Int            @id @default(autoincrement())
+  date          DateTime       @default(now())
+  method        PaymentMethod? @default(CASH)
+  subtotalCents Int
+  discountCents Int
+  totalCents    Int
+  createdById   Int?
+  payments      Payment[]
 }
 
 model Teacher {
@@ -179,4 +203,87 @@ model Family {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   students  Student[]
+}
+
+// ─── Scolarité : notes, compétences Juz Amma, bulletins ──────────────
+
+// Subject graded with marks (Arabe, Éducation islamique...). The Juz Amma is
+// NOT a subject: it is assessed with competencies (see SurahAssessment).
+model Subject {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  coefficient Int          @default(1)
+  evaluations Evaluation[]
+  createdAt   DateTime     @default(now())
+}
+
+// A grading period (trimestre, semestre...). Its dates bound the attendance
+// counted on the report card.
+model Term {
+  id            Int               @id @default(autoincrement())
+  name          String            @unique
+  startDate     String // "YYYY-MM-DD"
+  endDate       String // "YYYY-MM-DD"
+  evaluations   Evaluation[]
+  surahLevels   SurahAssessment[]
+  reportRemarks ReportRemark[]
+  createdAt     DateTime          @default(now())
+}
+
+// One test given to a class (e.g. "Contrôle 1"), whose marks are entered together.
+model Evaluation {
+  id          Int      @id @default(autoincrement())
+  title       String
+  date        String // "YYYY-MM-DD"
+  maxScore    Int      @default(20)
+  coefficient Int      @default(1)
+  classId     Int
+  class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId   Int
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  termId      Int
+  term        Term     @relation(fields: [termId], references: [id], onDelete: Restrict)
+  grades      Grade[]
+  createdAt   DateTime @default(now())
+
+  @@index([classId, termId])
+}
+
+model Grade {
+  id           Int        @id @default(autoincrement())
+  // Mark in hundredths of a point (12.5/20 -> 1250), null when absent.
+  scoreCents   Int?
+  absent       Boolean    @default(false)
+  evaluationId Int
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  studentId    Int
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([evaluationId, studentId])
+}
+
+// Competency level reached on one surah of the Juz Amma (surahs 78 to 114) for a term.
+model SurahAssessment {
+  id          Int     @id @default(autoincrement())
+  surahNumber Int
+  level       String // NOT_ACQUIRED, IN_PROGRESS, ACQUIRED, MASTERED
+  studentId   Int
+  student     Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId      Int
+  term        Term    @relation(fields: [termId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, termId, surahNumber])
+}
+
+// General appreciation written on a student's report card for a term.
+model ReportRemark {
+  id        Int      @id @default(autoincrement())
+  comment   String
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId    Int
+  term      Term     @relation(fields: [termId], references: [id], onDelete: Restrict)
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, termId])
 }

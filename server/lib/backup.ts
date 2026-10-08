@@ -1,16 +1,19 @@
 /**
  * Normalisation et migration des sauvegardes JSON.
  *
- * Le format interne courant (v3) est un objet plat contenant les 8 collections
+ * Le format interne courant (v3) est un objet plat contenant les collections
  * métier attendues par `importPayloadSchema` dans routes/data.ts :
  *   classes, schoolYears, families, students, teachers, payments,
- *   attendances, enrollments
+ *   paymentGroups, attendances, enrollments, subjects, terms, evaluations,
+ *   surahAssessments, reportRemarks
  *
  * Les fichiers peuvent arriver sous plusieurs formes :
  *   - v1 (SQLite) : classes/students/teachers/payments/attendances, montants en
  *     euros (`tuitionFee`, `amount`) ;
  *   - v2 : ajoute les présences typées mais pas les années/familles/inscriptions ;
- *   - v3 : ajoute schoolYears/families/enrollments et les classes de profs.
+ *   - v3 : ajoute schoolYears/families/enrollments et les classes de profs,
+ *     puis (ajouts facultatifs) les paiements groupés et la scolarité : matières,
+ *     périodes, évaluations/notes, compétences Juz Amma et appréciations.
  *
  * Le format canonique exporté par le serveur est :
  *   { application, backupFormatVersion, createdAt, version, data: { ... } }
@@ -32,8 +35,14 @@ export const BACKUP_COLLECTIONS = [
   'students',
   'teachers',
   'payments',
+  'paymentGroups',
   'attendances',
   'enrollments',
+  'subjects',
+  'terms',
+  'evaluations',
+  'surahAssessments',
+  'reportRemarks',
 ] as const;
 
 export type BackupCollection = (typeof BACKUP_COLLECTIONS)[number];

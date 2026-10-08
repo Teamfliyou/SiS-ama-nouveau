@@ -7,6 +7,7 @@ import { centsToEuros } from '../lib/money';
 import { toLabelMethod } from '../lib/paymentMethods';
 import { syncEnrollment } from '../lib/enrollments';
 import { toYmd, ymdToDate } from '../lib/dates';
+import { studentBalance } from '../lib/billing';
 
 const router = Router();
 
@@ -52,7 +53,14 @@ type StudentRow = {
     email: string | null;
     address: string | null;
   } | null;
-  payments: { id: number; amountCents: number; date: Date; method: string | null }[];
+  payments: {
+    id: number;
+    amountCents: number;
+    discountCents: number;
+    date: Date;
+    method: string | null;
+    groupId: number | null;
+  }[];
   enrollments?: {
     id: number;
     classId: number;
@@ -79,9 +87,7 @@ const ageInOctober2026 = (dateOfBirth: Date | null): number | null => {
 };
 
 const mapStudent = (s: StudentRow) => {
-  const totalPaidCents = s.payments.reduce((acc, p) => acc + p.amountCents, 0);
-  const totalAmountDueCents = s.class?.tuitionFeeCents ?? 0;
-  const remainingCents = totalAmountDueCents - totalPaidCents;
+  const { totalPaidCents, totalAmountDueCents, totalDiscountCents, remainingCents } = studentBalance(s);
   return {
     id: s.id,
     firstName: s.firstName,
@@ -126,13 +132,18 @@ const mapStudent = (s: StudentRow) => {
       id: p.id,
       amountCents: p.amountCents,
       amount: centsToEuros(p.amountCents),
+      discountCents: p.discountCents,
+      discount: centsToEuros(p.discountCents),
       date: p.date,
       method: toLabelMethod(p.method),
+      groupId: p.groupId,
     })),
     totalPaidCents,
     totalAmountDueCents,
+    totalDiscountCents,
     remainingCents,
     totalPaid: centsToEuros(totalPaidCents),
+    totalDiscount: centsToEuros(totalDiscountCents),
     totalAmountDue: centsToEuros(totalAmountDueCents),
     remaining: centsToEuros(remainingCents),
   };

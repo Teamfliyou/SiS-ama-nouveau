@@ -2,10 +2,14 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu,
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
-  ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer, Settings
+  ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer, Settings,
+  NotebookPen, Sparkles, FileText, BookMarked
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../../utils/api';
+import Sheet from '../mobile/Sheet';
+import { MobileHeader, MobileTabBar, MoreSheet } from '../mobile/MobileNav';
+import { TAB_ITEMS } from '../mobile/nav';
 
 /**
  * Layout historique de SiS AMA. Il est rendu tel quel lorsque l'utilisateur a
@@ -17,6 +21,7 @@ export default function ClassicLayout() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isProfileOpen, setProfileOpen] = useState(false);
   const [showPwdModal, setShowPwdModal] = useState(false);
+  const [isMoreOpen, setMoreOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
   // Password change form
@@ -53,10 +58,22 @@ export default function ClassicLayout() {
     { name: 'Finances',        href: '/finances',     icon: CreditCard },
     { name: 'Appel',           href: '/attendance',   icon: ClipboardList },
     { name: 'Feuilles d\'appel', href: '/attendance-sheets', icon: Printer },
+    { name: 'Notes',           href: '/grades',       icon: NotebookPen },
+    { name: 'Juz Amma',        href: '/competencies', icon: Sparkles },
+    { name: 'Bulletins',       href: '/report-cards', icon: FileText },
+    { name: 'Matières & périodes', href: '/school-settings', icon: BookMarked },
     { name: 'Import CSV',      href: '/import-csv',   icon: UploadCloud },
     ...(isAdmin ? [{ name: 'Utilisateurs', href: '/users', icon: ShieldCheck }] : []),
     { name: 'Paramètres',      href: '/settings',     icon: Settings },
   ];
+
+  // Mobile : les sections hors barre du bas vont dans le menu « Plus ».
+  const tabHrefs = TAB_ITEMS.map(t => t.href);
+  const secondaryNav = navigation.filter(item => !tabHrefs.includes(item.href));
+  const currentNav = navigation.find(item => item.href === location.pathname);
+  const pageTitle = currentNav ? currentNav.name : 'SIS';
+
+  const openPasswordModal = () => { setPwdError(''); setPwdSuccess(false); setShowPwdModal(true); };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -82,14 +99,32 @@ export default function ClassicLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-slate-50 flex mobile:bg-transparent">
+      {/* Fond mobile (profondeur pour le verre) */}
+      <div className="m-backdrop hidden mobile:block" aria-hidden />
+
+      {/* Navigation mobile : header compact + barre du bas + menu « Plus » */}
+      <MobileHeader title={pageTitle} initials={userInitials} onAccount={() => setMoreOpen(true)} />
+      <MobileTabBar pathname={location.pathname} moreActive={!!currentNav && !tabHrefs.includes(currentNav.href)} onMore={() => setMoreOpen(true)} />
+      <MoreSheet
+        open={isMoreOpen}
+        onClose={() => setMoreOpen(false)}
+        items={secondaryNav}
+        pathname={location.pathname}
+        email={userEmail}
+        initials={userInitials}
+        isAdmin={isAdmin}
+        onPassword={openPasswordModal}
+        onLogout={handleLogout}
+      />
+
       {/* Mobile sidebar backdrop */}
       {isSidebarOpen && (
         <div className="fixed inset-0 z-20 bg-slate-900/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar */}
-      <div className={`app-sidebar fixed inset-y-0 left-0 z-30 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 shadow-sm ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`app-sidebar mobile:hidden fixed inset-y-0 left-0 z-30 w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 shadow-sm ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-full flex flex-col">
           <div className="flex items-center justify-center h-20 border-b border-slate-100 px-6">
             <img src="/logo.png" alt="ASSO AMA SIS" className="h-14 w-auto object-contain" />
@@ -119,7 +154,7 @@ export default function ClassicLayout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar */}
-        <header className="app-header bg-white/80 backdrop-blur-md border-b border-slate-200 h-20 flex items-center justify-between px-4 sm:px-6 lg:px-8 z-10 sticky top-0">
+        <header className="app-header mobile:hidden bg-white/80 backdrop-blur-md border-b border-slate-200 h-20 flex items-center justify-between px-4 sm:px-6 lg:px-8 z-10 sticky top-0">
           <div className="flex items-center">
             <button onClick={() => setSidebarOpen(true)} aria-label="Ouvrir le menu" className="p-2 mr-4 text-slate-500 rounded-lg lg:hidden hover:bg-slate-100">
               <Menu className="h-6 w-6" />
@@ -174,7 +209,7 @@ export default function ClassicLayout() {
                   {/* Actions */}
                   <div className="py-1">
                     <button
-                      onClick={() => { setProfileOpen(false); setPwdError(''); setPwdSuccess(false); setShowPwdModal(true); }}
+                      onClick={() => { setProfileOpen(false); openPasswordModal(); }}
                       className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                     >
                       <KeyRound className="w-4 h-4 text-slate-400" /> Changer mon mot de passe
@@ -204,15 +239,14 @@ export default function ClassicLayout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 mobile:overflow-visible mobile:px-4 mobile:pt-[calc(var(--m-header-h)+var(--safe-top)+12px)] mobile:pb-[calc(var(--m-tabbar-h)+max(8px,var(--safe-bottom))+24px)]">
           <Outlet />
         </main>
       </div>
 
       {/* ── Change password modal ── */}
-      {showPwdModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="glass-modal bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
+      <Sheet open={showPwdModal} onClose={() => setShowPwdModal(false)}>
+          <div className="p-6 mobile:px-5 mobile:pt-2">
             <div className="flex justify-between items-center mb-5">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary/10 rounded-xl">
@@ -220,7 +254,7 @@ export default function ClassicLayout() {
                 </div>
                 <h3 className="text-lg font-bold text-slate-800">Changer le mot de passe</h3>
               </div>
-              <button onClick={() => setShowPwdModal(false)} aria-label="Fermer" className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowPwdModal(false)} aria-label="Fermer" className="text-slate-400 hover:text-slate-600 mobile:h-11 mobile:w-11 mobile:-mr-3 mobile:flex mobile:items-center mobile:justify-center">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -237,10 +271,10 @@ export default function ClassicLayout() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Mot de passe actuel</label>
                   <div className="relative">
-                    <input type={showCurrent ? 'text' : 'password'} required
+                    <input type={showCurrent ? 'text' : 'password'} required autoComplete="current-password"
                       value={currentPwd} onChange={e => setCurrentPwd(e.target.value)}
                       className="w-full px-3 py-2.5 pr-10 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary" />
-                    <button type="button" onClick={() => setShowCurrent(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    <button type="button" onClick={() => setShowCurrent(s => !s)} aria-label="Afficher / masquer" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 mobile:right-1 mobile:p-2.5">
                       {showCurrent ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
                     </button>
                   </div>
@@ -248,28 +282,27 @@ export default function ClassicLayout() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Nouveau mot de passe</label>
                   <div className="relative">
-                    <input type={showNew ? 'text' : 'password'} required minLength={8}
+                    <input type={showNew ? 'text' : 'password'} required minLength={8} autoComplete="new-password"
                       value={newPwd} onChange={e => setNewPwd(e.target.value)}
                       placeholder="Min. 8 caractères"
                       className="w-full px-3 py-2.5 pr-10 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary" />
-                    <button type="button" onClick={() => setShowNew(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    <button type="button" onClick={() => setShowNew(s => !s)} aria-label="Afficher / masquer" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 mobile:right-1 mobile:p-2.5">
                       {showNew ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
                     </button>
                   </div>
                 </div>
                 {pwdError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{pwdError}</p>}
-                <div className="flex justify-end gap-3 pt-1">
-                  <button type="button" onClick={() => setShowPwdModal(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Annuler</button>
+                <div className="flex justify-end gap-3 pt-1 mobile:flex-col-reverse mobile:gap-2">
+                  <button type="button" onClick={() => setShowPwdModal(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg mobile:min-h-[48px] mobile:text-[15px]">Annuler</button>
                   <button type="submit" disabled={pwdLoading}
-                    className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-blue-600 transition-all disabled:opacity-60">
+                    className="mobile:min-h-[48px] mobile:text-[15px] px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-blue-600 transition-all disabled:opacity-60">
                     {pwdLoading ? 'Enregistrement...' : 'Confirmer'}
                   </button>
                 </div>
               </form>
             )}
           </div>
-        </div>
-      )}
+      </Sheet>
     </div>
   );
 }

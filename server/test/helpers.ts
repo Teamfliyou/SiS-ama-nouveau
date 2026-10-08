@@ -52,8 +52,15 @@ export async function adminSession(): Promise<{ token: string; id: number }> {
 export async function resetDb() {
   await prisma.teacherClass.deleteMany();
   await prisma.enrollment.deleteMany();
+  await prisma.grade.deleteMany();
+  await prisma.evaluation.deleteMany();
+  await prisma.surahAssessment.deleteMany();
+  await prisma.reportRemark.deleteMany();
+  await prisma.subject.deleteMany();
+  await prisma.term.deleteMany();
   await prisma.attendance.deleteMany();
   await prisma.payment.deleteMany();
+  await prisma.paymentGroup.deleteMany();
   await prisma.teacher.deleteMany();
   await prisma.student.deleteMany();
   await prisma.family.deleteMany();

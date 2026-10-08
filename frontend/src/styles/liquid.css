@@ -664,6 +664,16 @@
   }
 }
 
+/* ── Bureau : respecter `lg:hidden` ──────────────────────────────── */
+/* Les règles Liquid ci-dessus (display: grid / inline-flex) ne sont pas dans
+   une couche Tailwind et l'emportaient sur l'utilitaire `lg:hidden` : la barre
+   basse mobile et le bouton « fermer » du menu restaient visibles sur ordinateur. */
+@media (min-width: 1024px) {
+  [data-theme='liquid'] .lg\:hidden {
+    display: none !important;
+  }
+}
+
 /* ── Impression : neutraliser le verre ───────────────────────────── */
 @media print {
   [data-theme='liquid'] .lg-bg,

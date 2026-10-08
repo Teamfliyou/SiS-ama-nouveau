@@ -3,6 +3,8 @@ import { UploadCloud, FileText, ArrowRight, CheckCircle2, AlertTriangle, X, Refr
 import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
 import { formatCurrency } from '../utils/format';
 import { parseCSV, downloadCsv, downloadExcel, findColumn } from '../utils/csv';
+import { useIsMobile } from '../hooks/useIsMobile';
+import { mList } from '../components/mobile/styles';
 
 type Step = 'upload' | 'mapping' | 'preview' | 'done';
 
@@ -86,6 +88,7 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const isMobile = useIsMobile();
 
   const handleFile = (file: File) => {
     if (!file.name.endsWith('.csv')) { setError('Veuillez sélectionner un fichier .csv'); return; }
@@ -200,10 +203,10 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
   ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-4xl mx-auto space-y-8 mobile:space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
       {!embedded && (
-        <div>
+        <div className="mobile:hidden">
           <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Import CSV</h2>
           <p className="mt-2 text-sm text-slate-500">Importez les élèves, classes, familles et toutes les informations du formulaire d’inscription.</p>
         </div>
@@ -218,15 +221,15 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
           const isDone = stepOrder.indexOf(s.id) < currentIdx;
           return (
             <div key={s.id} className="flex items-center flex-1 last:flex-none">
-              <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors mobile:px-2.5 mobile:py-1.5 mobile:gap-1.5 mobile:text-[13px] ${
                 isActive ? 'bg-primary text-white shadow-sm' :
                 isDone ? 'bg-emerald-50 text-emerald-700' :
                 'bg-slate-100 text-slate-400'
               }`}>
                 {isDone ? <CheckCircle2 className="w-4 h-4"/> : <span className="w-4 h-4 flex items-center justify-center text-xs font-black">{i+1}</span>}
-                {s.label}
+                <span className={isActive ? '' : 'mobile:hidden'}>{s.label}</span>
               </div>
-              {i < STEPS.length - 1 && <div className={`flex-1 h-0.5 mx-2 ${isDone ? 'bg-emerald-200' : 'bg-slate-100'}`}/>}
+              {i < STEPS.length - 1 && <div className={`flex-1 h-0.5 mx-2 mobile:mx-1 ${isDone ? 'bg-emerald-200' : 'bg-slate-100'}`}/>}
             </div>
           );
         })}
@@ -234,25 +237,26 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
 
       {/* STEP 1: Upload */}
       {step === 'upload' && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 mobile:p-4 mobile:glass-surface">
           <div
             onDrop={onDrop}
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onClick={() => fileRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${
+            className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all mobile:p-6 ${
               dragOver ? 'border-primary bg-blue-50' : 'border-slate-200 hover:border-primary/50 hover:bg-slate-50'
             }`}
           >
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
-            <UploadCloud className={`w-14 h-14 mx-auto mb-4 transition-colors ${dragOver ? 'text-primary' : 'text-slate-300'}`} />
-            <p className="text-lg font-semibold text-slate-700">Glissez votre fichier CSV ici</p>
-            <p className="text-sm text-slate-400 mt-1">ou cliquez pour parcourir</p>
-            <p className="text-xs text-slate-300 mt-4">Format attendu : colonnes séparées par des virgules, première ligne = en-têtes</p>
+            <UploadCloud className={`w-14 h-14 mx-auto mb-4 transition-colors mobile:w-10 mobile:h-10 mobile:mb-2 ${dragOver ? 'text-primary' : 'text-slate-300'}`} />
+            <p className="text-lg font-semibold text-slate-700 mobile:hidden">Glissez votre fichier CSV ici</p>
+            <p className="text-sm text-slate-400 mt-1 mobile:hidden">ou cliquez pour parcourir</p>
+            <p className="hidden mobile:block text-[15px] font-semibold text-primary">Choisir un fichier CSV</p>
+            <p className="text-xs text-slate-300 mt-4 mobile:mt-2 mobile:text-slate-400">Format attendu : colonnes séparées par des virgules, première ligne = en-têtes</p>
           </div>
           {error && <p className="mt-4 text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>{error}</p>}
           {/* Example + Download */}
-          <div className="mt-6 p-4 bg-slate-50 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="mt-6 p-4 bg-slate-50 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 mobile:mt-4">
             <div>
               <p className="text-xs font-bold text-slate-500 uppercase mb-2">Exemple de fichier</p>
               <code className="text-xs text-slate-600 font-mono">
@@ -260,19 +264,19 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
                 Naël,Philippe,Ateliers 4 ans,130,07…,FAM001…
               </code>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 mobile:grid mobile:grid-cols-1">
             <button
               onClick={downloadSample}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-all shadow-sm whitespace-nowrap"
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-all shadow-sm whitespace-nowrap mobile:justify-center mobile:min-h-[44px]"
             >
-              <Download className="w-4 h-4 text-primary" />
+              <Download className="w-4 h-4 text-primary shrink-0" />
               Télécharger un fichier test
             </button>
             <button
               onClick={downloadSampleExcel}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition-all shadow-sm whitespace-nowrap"
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition-all shadow-sm whitespace-nowrap mobile:justify-center mobile:min-h-[44px]"
             >
-              <Download className="w-4 h-4 text-emerald-600" />
+              <Download className="w-4 h-4 text-emerald-600 shrink-0" />
               Télécharger en Excel
             </button>
           </div>
@@ -282,16 +286,16 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
 
       {/* STEP 2: Column mapping */}
       {step === 'mapping' && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 space-y-6 mobile:p-4 mobile:space-y-4 mobile:glass-surface">
           <div className="flex items-center gap-3">
             <FileText className="w-5 h-5 text-primary"/>
-            <div>
-              <p className="font-semibold text-slate-800">{fileName}</p>
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-800 truncate">{fileName}</p>
               <p className="text-xs text-slate-400">{rows.length} ligne{rows.length > 1 ? 's' : ''} détectée{rows.length > 1 ? 's' : ''}</p>
             </div>
           </div>
           <p className="text-sm text-slate-600">Associez chaque champ aux colonnes de votre fichier CSV.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mobile:grid-cols-1 mobile:gap-3">
             {([
               { key: 'firstName', label: 'Prénom', required: true },
               { key: 'lastName', label: 'Nom', required: true },
@@ -310,7 +314,7 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
               { key: 'ageInOctober2026', label: 'Âge en octobre 2026 (informatif)', required: false },
             ] as const).map(field => (
               <div key={field.key}>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-700 mb-2 mobile:mb-1.5 mobile:text-[13px]">
                   {field.label} {field.required && <span className="text-red-500">*</span>}
                 </label>
                 <select
@@ -329,14 +333,14 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
               <AlertTriangle className="w-4 h-4"/> Prénom et Nom sont obligatoires.
             </p>
           )}
-          <div className="flex justify-between pt-2">
-            <button onClick={reset} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+          <div className="flex justify-between pt-2 mobile:gap-2">
+            <button onClick={reset} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors mobile:min-h-[48px] mobile:bg-slate-100 mobile:rounded-xl mobile:text-[15px] mobile:font-semibold">
               <X className="w-4 h-4"/> Annuler
             </button>
             <button
               onClick={() => setStep('preview')}
               disabled={!columnMap.firstName || !columnMap.lastName}
-              className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl hover:bg-blue-600 transition-all disabled:opacity-40"
+              className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-bold rounded-xl hover:bg-blue-600 transition-all disabled:opacity-40 mobile:flex-1 mobile:justify-center mobile:min-h-[48px] mobile:text-[15px] mobile:font-semibold"
             >
               Aperçu <ArrowRight className="w-4 h-4"/>
             </button>
@@ -347,6 +351,27 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
       {/* STEP 3: Preview */}
       {step === 'preview' && (
         <div className="space-y-6">
+          {isMobile ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3 px-1">
+                <p className="text-[15px] font-semibold text-slate-800">{mappedRows.length} élève{mappedRows.length > 1 ? 's' : ''} à importer</p>
+                <button onClick={() => setStep('mapping')} className="min-h-[44px] text-[13px] font-semibold text-primary">Colonnes</button>
+              </div>
+              <ul className={`${mList} max-h-[55vh] overflow-y-auto`}>
+                {mappedRows.map((row, i) => (
+                  <li key={i} className="px-4 py-2.5">
+                    <p className="text-[15px] font-medium text-slate-800 truncate">
+                      {row.firstName || <span className="text-red-400 italic">prénom manquant</span>}{' '}
+                      <span className="uppercase">{row.lastName || <span className="normal-case text-red-400 italic">nom manquant</span>}</span>
+                    </p>
+                    <p className="text-[13px] text-slate-500 truncate">
+                      {[row.className || 'Sans classe', row.tuitionFee ? formatCurrency(row.tuitionFee) : '', row.phone].filter(Boolean).join(' · ')}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
               <p className="font-bold text-slate-800">{mappedRows.length} élève{mappedRows.length > 1 ? 's' : ''} à importer</p>
@@ -391,13 +416,14 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
               </table>
             </div>
           </div>
+          )}
           {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>{error}</p>}
-          <div className="flex justify-between">
-            <button onClick={() => setStep('mapping')} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Retour</button>
+          <div className="flex justify-between mobile:gap-2">
+            <button onClick={() => setStep('mapping')} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors mobile:min-h-[48px] mobile:bg-slate-100 mobile:rounded-xl mobile:text-[15px] mobile:font-semibold">Retour</button>
             <button
               onClick={handleImport}
               disabled={importing || mappedRows.length === 0}
-              className="flex items-center gap-2 px-7 py-2.5 bg-primary text-white text-sm font-bold rounded-xl hover:bg-blue-600 transition-all shadow-sm shadow-primary/20 disabled:opacity-60"
+              className="flex items-center gap-2 px-7 py-2.5 bg-primary text-white text-sm font-bold rounded-xl hover:bg-blue-600 transition-all shadow-sm shadow-primary/20 disabled:opacity-60 mobile:flex-1 mobile:justify-center mobile:min-h-[48px] mobile:px-3 mobile:text-[15px] mobile:font-semibold"
             >
               {importing ? <><RefreshCw className="w-4 h-4 animate-spin"/> Import en cours...</> : `Importer ${mappedRows.length} élève${mappedRows.length > 1 ? 's' : ''}`}
             </button>
@@ -407,7 +433,7 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
 
       {/* STEP 4: Done */}
       {step === 'done' && result && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center space-y-6 mobile:p-5 mobile:space-y-5 mobile:glass-surface">
           <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-10 h-10 text-emerald-500"/>
           </div>
@@ -415,29 +441,29 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
             <h3 className="text-2xl font-black text-slate-800">Import réussi !</h3>
             <p className="text-slate-500 mt-2 text-sm">Les données ont été ajoutées à la base.</p>
           </div>
-          <div className="flex flex-wrap justify-center gap-4">
-            <div className="bg-blue-50 border border-blue-100 rounded-2xl px-8 py-5">
+          <div className="flex flex-wrap justify-center gap-4 mobile:grid mobile:grid-cols-2 mobile:gap-2">
+            <div className="bg-blue-50 border border-blue-100 rounded-2xl px-8 py-5 mobile:px-3 mobile:py-4">
               <p className="text-3xl font-black text-primary">{result.createdStudents}</p>
               <p className="text-sm text-slate-600 mt-1">élève{result.createdStudents > 1 ? 's' : ''} créé{result.createdStudents > 1 ? 's' : ''}</p>
             </div>
             {!!result.updatedStudents && (
-              <div className="bg-cyan-50 border border-cyan-100 rounded-2xl px-8 py-5">
+              <div className="bg-cyan-50 border border-cyan-100 rounded-2xl px-8 py-5 mobile:px-3 mobile:py-4">
                 <p className="text-3xl font-black text-cyan-700">{result.updatedStudents}</p>
                 <p className="text-sm text-slate-600 mt-1">fiche{result.updatedStudents > 1 ? 's' : ''} mise{result.updatedStudents > 1 ? 's' : ''} à jour</p>
               </div>
             )}
             {!!result.linkedFamilies && (
-              <div className="bg-violet-50 border border-violet-100 rounded-2xl px-8 py-5">
+              <div className="bg-violet-50 border border-violet-100 rounded-2xl px-8 py-5 mobile:px-3 mobile:py-4">
                 <p className="text-3xl font-black text-violet-700">{result.linkedFamilies}</p>
                 <p className="text-sm text-slate-600 mt-1">famille{result.linkedFamilies > 1 ? 's' : ''} liée{result.linkedFamilies > 1 ? 's' : ''}</p>
               </div>
             )}
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-8 py-5">
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-8 py-5 mobile:px-3 mobile:py-4">
               <p className="text-3xl font-black text-indigo-600">{result.createdClasses}</p>
               <p className="text-sm text-slate-600 mt-1">classe{result.createdClasses > 1 ? 's' : ''} créée{result.createdClasses > 1 ? 's' : ''}</p>
             </div>
             {!!result.skipped && (
-              <div className="bg-amber-50 border border-amber-100 rounded-2xl px-8 py-5">
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl px-8 py-5 mobile:px-3 mobile:py-4">
                 <p className="text-3xl font-black text-amber-600">{result.skipped}</p>
                 <p className="text-sm text-slate-600 mt-1">ligne{result.skipped! > 1 ? 's' : ''} ignorée{result.skipped! > 1 ? 's' : ''}</p>
               </div>
@@ -458,7 +484,7 @@ export default function CsvImport({ embedded = false }: { embedded?: boolean } =
           )}
           <button
             onClick={reset}
-            className="mx-auto flex items-center gap-2 px-6 py-2.5 bg-slate-100 text-slate-700 font-semibold text-sm rounded-xl hover:bg-slate-200 transition-colors"
+            className="mx-auto flex items-center gap-2 px-6 py-2.5 mobile:min-h-[48px] bg-slate-100 text-slate-700 font-semibold text-sm rounded-xl hover:bg-slate-200 transition-colors"
           >
             <UploadCloud className="w-4 h-4"/> Nouvel import
           </button>

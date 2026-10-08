@@ -15,6 +15,7 @@ import {
   normalizeBackupInput,
   buildBackupFilename,
 } from '../lib/backup';
+import { COMPETENCY_LEVELS, SURAH_NUMBERS } from '../lib/juzAmma';
 
 const router = Router();
 
@@ -75,6 +76,18 @@ const schoolYearDateSchema = z
   .refine((v) => isParsableDateString(v), { message: 'Date invalide (attendu YYYY-MM-DD)' });
 
 const studentRefSchema = z.object({ id: z.number().int() }).optional();
+
+/** Jour calendaire strict « YYYY-MM-DD » (matières, périodes, évaluations). */
+const ymdSchema = z
+  .string()
+  .max(10)
+  .refine((v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && isRealDateString(v), { message: 'Date invalide (attendu YYYY-MM-DD)' });
+
+/** Référence de classe par nom (+ année scolaire facultative pour lever l'ambiguïté). */
+const classRefSchema = z.object({
+  name: z.string(),
+  schoolYear: z.object({ name: z.string() }).nullable().optional(),
+});
 
 /** Les familles sont identifiées par email quand il existe, sinon nom+téléphone. */
 const familyKeyOf = (f: { name?: string | null; phone?: string | null; email?: string | null }): string =>
@@ -187,8 +200,23 @@ const importPayloadSchema = z.object({
         note: optionalString.transform((v) => v || null),
         amount: euroNumber,
         amountCents: centsNumber,
+        discountCents: centsNumber,
+        groupId: z.number().int().nullable().optional(),
         date: paymentDateSchema,
         student: studentRefSchema,
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
+  paymentGroups: z
+    .array(
+      z.object({
+        id: z.number().int(),
+        method: optionalString.transform((v) => v || 'Espèces'),
+        subtotalCents: z.number().int().nonnegative().max(MAX_CENTS),
+        discountCents: z.number().int().nonnegative().max(MAX_CENTS),
+        totalCents: z.number().int().nonnegative().max(MAX_CENTS),
+        date: paymentDateSchema,
       })
     )
     .max(MAX_ITEMS)
@@ -224,7 +252,102 @@ const importPayloadSchema = z.object({
     )
     .max(MAX_ITEMS)
     .optional(),
+  subjects: z
+    .array(z.object({ name: z.string().trim().min(1).max(80), coefficient: z.number().int().min(0).max(20).default(1) }))
+    .max(MAX_ITEMS)
+    .optional(),
+  terms: z
+    .array(z.object({ name: z.string().trim().min(1).max(80), startDate: ymdSchema, endDate: ymdSchema }))
+    .max(MAX_ITEMS)
+    .optional(),
+  evaluations: z
+    .array(
+      z.object({
+        title: z.string().trim().min(1).max(120),
+        date: ymdSchema,
+        maxScore: z.number().int().min(1).max(100).default(20),
+        coefficient: z.number().int().min(1).max(20).default(1),
+        class: classRefSchema,
+        subject: z.object({ name: z.string() }),
+        term: z.object({ name: z.string() }),
+        grades: z
+          .array(
+            z.object({
+              studentId: z.number().int(),
+              scoreCents: z.number().int().nonnegative().max(10_000).nullable().default(null),
+              absent: z.boolean().default(false),
+            })
+          )
+          .max(MAX_ITEMS)
+          .default([]),
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
+  surahAssessments: z
+    .array(
+      z.object({
+        studentId: z.number().int(),
+        surahNumber: z.number().int().refine((n) => SURAH_NUMBERS.has(n)),
+        level: z.enum(COMPETENCY_LEVELS),
+        term: z.object({ name: z.string() }),
+      })
+    )
+    .max(MAX_ITEMS * 4)
+    .optional(),
+  reportRemarks: z
+    .array(
+      z.object({
+        studentId: z.number().int(),
+        comment: z.string().trim().min(1).max(1000),
+        term: z.object({ name: z.string() }),
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
 });
+
+/**
+ * Efface toutes les données métier (jamais les comptes utilisateurs), dans
+ * l'ordre FK-safe : enfants avant parents. Partagé par la réinitialisation et
+ * la restauration en mode `replace`.
+ */
+const deleteBusinessData = async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
+  const grade = await tx.grade.deleteMany();
+  const evaluation = await tx.evaluation.deleteMany();
+  const surahAssessment = await tx.surahAssessment.deleteMany();
+  const reportRemark = await tx.reportRemark.deleteMany();
+  const attendance = await tx.attendance.deleteMany();
+  const payment = await tx.payment.deleteMany();
+  const paymentGroup = await tx.paymentGroup.deleteMany();
+  const enrollment = await tx.enrollment.deleteMany();
+  const teacherClass = await tx.teacherClass.deleteMany();
+  const student = await tx.student.deleteMany();
+  const teacher = await tx.teacher.deleteMany();
+  const classes = await tx.class.deleteMany();
+  const family = await tx.family.deleteMany();
+  const schoolYear = await tx.schoolYear.deleteMany();
+  const subject = await tx.subject.deleteMany();
+  const term = await tx.term.deleteMany();
+  return {
+    attendances: attendance.count,
+    payments: payment.count,
+    paymentGroups: paymentGroup.count,
+    enrollments: enrollment.count,
+    teacherClasses: teacherClass.count,
+    students: student.count,
+    teachers: teacher.count,
+    classes: classes.count,
+    families: family.count,
+    schoolYears: schoolYear.count,
+    grades: grade.count,
+    evaluations: evaluation.count,
+    surahAssessments: surahAssessment.count,
+    reportRemarks: reportRemark.count,
+    subjects: subject.count,
+    terms: term.count,
+  };
+};
 
 /**
  * Ramène toute sauvegarde (v1/v2/v3, avec ou sans enveloppe `data`) au format
@@ -250,8 +373,22 @@ router.get(
   authenticate,
   requireAdmin,
   asyncHandler(async (_req, res) => {
-    const [classes, students, teachers, payments, attendances, schoolYears, families, enrollments] =
-      await Promise.all([
+    const [
+      classes,
+      students,
+      teachers,
+      payments,
+      attendances,
+      schoolYears,
+      families,
+      enrollments,
+      paymentGroups,
+      subjects,
+      terms,
+      evaluations,
+      surahAssessments,
+      reportRemarks,
+    ] = await Promise.all([
         prisma.class.findMany({
           orderBy: { name: 'asc' },
           include: { schoolYear: { select: { id: true, name: true } } },
@@ -272,6 +409,20 @@ router.get(
           include: { class: { select: { name: true } }, schoolYear: { select: { name: true } } },
           orderBy: { id: 'asc' },
         }),
+        prisma.paymentGroup.findMany({ orderBy: { date: 'desc' } }),
+        prisma.subject.findMany({ orderBy: { name: 'asc' } }),
+        prisma.term.findMany({ orderBy: { startDate: 'asc' } }),
+        prisma.evaluation.findMany({
+          include: {
+            class: { select: { name: true, schoolYear: { select: { name: true } } } },
+            subject: { select: { name: true } },
+            term: { select: { name: true } },
+            grades: true,
+          },
+          orderBy: { date: 'asc' },
+        }),
+        prisma.surahAssessment.findMany({ include: { term: { select: { name: true } } } }),
+        prisma.reportRemark.findMany({ include: { term: { select: { name: true } } } }),
       ]);
 
     const data = {
@@ -314,6 +465,12 @@ router.get(
         startDate: e.startDate ? toYmd(e.startDate) : null,
         endDate: e.endDate ? toYmd(e.endDate) : null,
       })),
+      paymentGroups: paymentGroups.map((g) => ({ ...g, method: toLabelMethod(g.method) })),
+      subjects,
+      terms,
+      evaluations,
+      surahAssessments,
+      reportRemarks,
     };
 
     const now = new Date();
@@ -352,6 +509,12 @@ router.post(
       payments = [],
       attendances = [],
       enrollments = [],
+      paymentGroups = [],
+      subjects = [],
+      terms = [],
+      evaluations = [],
+      surahAssessments = [],
+      reportRemarks = [],
     } = payload;
 
     // `?mode=replace` : supprime d'abord les données métier (jamais les comptes
@@ -360,18 +523,8 @@ router.post(
     const replaceAll = req.query.mode === 'replace';
 
     const counts = await prisma.$transaction(async (tx) => {
-      if (replaceAll) {
-        // Ordre FK-safe : enfants avant parents. Les comptes User sont conservés.
-        await tx.attendance.deleteMany();
-        await tx.payment.deleteMany();
-        await tx.enrollment.deleteMany();
-        await tx.teacherClass.deleteMany();
-        await tx.student.deleteMany();
-        await tx.teacher.deleteMany();
-        await tx.class.deleteMany();
-        await tx.family.deleteMany();
-        await tx.schoolYear.deleteMany();
-      }
+      // Les comptes User sont conservés.
+      if (replaceAll) await deleteBusinessData(tx);
 
       let classesCreated = 0;
       let schoolYearsCreated = 0;
@@ -606,6 +759,30 @@ router.post(
         }
       }
 
+      // ── Paiements groupés ─────────────────────────────────────────────
+      // Un groupe n'est recréé qu'au premier import effectif de l'une de ses
+      // lignes : une ré-importation ne duplique donc jamais les groupes.
+      const groupsById = new Map(paymentGroups.map((g) => [g.id, g]));
+      const groupMap = new Map<number, number>(); // id d'origine -> id créé
+      const resolveGroupId = async (originalId: number | null | undefined): Promise<number | null> => {
+        if (originalId === null || originalId === undefined) return null;
+        const created = groupMap.get(originalId);
+        if (created !== undefined) return created;
+        const g = groupsById.get(originalId);
+        if (!g) return null;
+        const row = await tx.paymentGroup.create({
+          data: {
+            method: toEnumMethod(g.method) ?? 'CASH',
+            subtotalCents: g.subtotalCents,
+            discountCents: g.discountCents,
+            totalCents: g.totalCents,
+            date: g.date ? new Date(g.date) : new Date(),
+          },
+        });
+        groupMap.set(originalId, row.id);
+        return row.id;
+      };
+
       // ── Paiements ─────────────────────────────────────────────────────
       for (const p of payments) {
         const newStudentId = studentMap.get(p.studentId ?? -1) ?? studentMap.get(p.student?.id ?? -1);
@@ -624,11 +801,13 @@ router.post(
         await tx.payment.create({
           data: {
             amountCents,
+            discountCents: p.discountCents ?? 0,
             method: toEnumMethod(p.method) ?? 'CASH',
             reference: p.reference,
             note: p.note,
             studentId: newStudentId,
             date,
+            groupId: await resolveGroupId(p.groupId),
           },
         });
         paymentsCreated++;
@@ -694,8 +873,89 @@ router.post(
         }
       }
 
+      // ── Scolarité (notes, compétences Juz Amma, appréciations) ────────
+      // Matières et périodes sont rapprochées par nom ; une évaluation par
+      // classe, matière, période, intitulé et date. Les notes, compétences et
+      // appréciations déjà présentes sont conservées.
+      const subjectMap = new Map(
+        (await tx.subject.findMany({ select: { id: true, name: true } })).map((x) => [normalizeKey(x.name), x.id])
+      );
+      const termMap = new Map(
+        (await tx.term.findMany({ select: { id: true, name: true } })).map((x) => [normalizeKey(x.name), x.id])
+      );
+      for (const sub of subjects) {
+        const key = normalizeKey(sub.name);
+        if (subjectMap.has(key)) continue;
+        subjectMap.set(key, (await tx.subject.create({ data: sub })).id);
+      }
+      for (const t of terms) {
+        const key = normalizeKey(t.name);
+        if (termMap.has(key)) continue;
+        termMap.set(key, (await tx.term.create({ data: t })).id);
+      }
+
+      let gradesCreated = 0;
+      for (const ev of evaluations) {
+        const classId =
+          resolveClassByNameYear(ev.class.name, ev.class.schoolYear?.name ?? null) ?? resolveClassByName(ev.class.name);
+        const subjectId = subjectMap.get(normalizeKey(ev.subject.name));
+        const termId = termMap.get(normalizeKey(ev.term.name));
+        if (classId === null || subjectId === undefined || termId === undefined) continue;
+        const existing = await tx.evaluation.findFirst({
+          where: { classId, subjectId, termId, title: ev.title, date: ev.date },
+        });
+        const evaluationId =
+          existing?.id ??
+          (
+            await tx.evaluation.create({
+              data: {
+                classId,
+                subjectId,
+                termId,
+                title: ev.title,
+                date: ev.date,
+                maxScore: ev.maxScore,
+                coefficient: ev.coefficient,
+              },
+            })
+          ).id;
+        const rows = ev.grades.flatMap((g) => {
+          const sid = studentMap.get(g.studentId);
+          return sid === undefined ? [] : [{ evaluationId, studentId: sid, scoreCents: g.scoreCents, absent: g.absent }];
+        });
+        gradesCreated += (await tx.grade.createMany({ data: rows, skipDuplicates: true })).count;
+      }
+
+      const byStudentAndTerm = <T extends { studentId: number; term: { name: string } }>(items: T[]) =>
+        items.flatMap((item) => {
+          const sid = studentMap.get(item.studentId);
+          const termId = termMap.get(normalizeKey(item.term.name));
+          return sid === undefined || termId === undefined ? [] : [{ item, studentId: sid, termId }];
+        });
+      const competenciesCreated = (
+        await tx.surahAssessment.createMany({
+          data: byStudentAndTerm(surahAssessments).map(({ item, studentId, termId }) => ({
+            studentId,
+            termId,
+            surahNumber: item.surahNumber,
+            level: item.level,
+          })),
+          skipDuplicates: true,
+        })
+      ).count;
+      await tx.reportRemark.createMany({
+        data: byStudentAndTerm(reportRemarks).map(({ item, studentId, termId }) => ({
+          studentId,
+          termId,
+          comment: item.comment,
+        })),
+        skipDuplicates: true,
+      });
+
       return {
         success: true,
+        gradesCreated,
+        competenciesCreated,
         classesCreated,
         schoolYearsCreated,
         familiesCreated,
@@ -725,29 +985,8 @@ router.delete(
   requireAdmin,
   validate(resetSchema),
   asyncHandler(async (_req, res) => {
-    const deleted = await prisma.$transaction(async (tx) => {
-      // Ordre FK-safe : enfants avant parents. `user` n'est jamais touché.
-      const attendance = await tx.attendance.deleteMany();
-      const payment = await tx.payment.deleteMany();
-      const enrollment = await tx.enrollment.deleteMany();
-      const teacherClass = await tx.teacherClass.deleteMany();
-      const student = await tx.student.deleteMany();
-      const teacher = await tx.teacher.deleteMany();
-      const classes = await tx.class.deleteMany();
-      const family = await tx.family.deleteMany();
-      const schoolYear = await tx.schoolYear.deleteMany();
-      return {
-        attendances: attendance.count,
-        payments: payment.count,
-        enrollments: enrollment.count,
-        teacherClasses: teacherClass.count,
-        students: student.count,
-        teachers: teacher.count,
-        classes: classes.count,
-        families: family.count,
-        schoolYears: schoolYear.count,
-      };
-    });
+    // `user` n'est jamais touché.
+    const deleted = await prisma.$transaction((tx) => deleteBusinessData(tx));
 
     res.json({ success: true, usersPreserved: true, deleted });
   })
