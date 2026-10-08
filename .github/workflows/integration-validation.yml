@@ -65,3 +65,12 @@ jobs:
         env:
           PRODUCTION_BASE_SHA: 7e86c00c9c97bed71c591f0dbcf69e98744b2ecc
         run: bash scripts/check-upgrade.sh
+      - name: Verify backup script on synthetic data only
+        run: |
+          createdb sisama_backup_verify
+          export SOURCE_DATABASE_URL="postgresql://${PGUSER}:${PGPASSWORD}@localhost:5432/sisama_upgrade_test"
+          export VERIFY_DATABASE_URL="postgresql://${PGUSER}:${PGPASSWORD}@localhost:5432/sisama_backup_verify"
+          export BACKUP_FILE="$RUNNER_TEMP/synthetic-backup.dump"
+          bash scripts/verified-backup.sh
+          test "$(psql "$VERIFY_DATABASE_URL" -At -c 'SELECT count(*) FROM "Student";')" = 1
+          test "$(psql "$VERIFY_DATABASE_URL" -At -c 'SELECT sum("amountCents") FROM "Payment";')" = 13500

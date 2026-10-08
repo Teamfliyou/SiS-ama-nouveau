@@ -12,7 +12,7 @@ import {
   preRegistrationValidateSchema,
 } from '../lib/validate';
 import { syncEnrollment } from '../lib/enrollments';
-import { ymdToDate } from '../lib/dates';
+import { ymdToDate, toYmd } from '../lib/dates';
 import { normalizeKey, studentKey } from '../lib/dedupe';
 import { mailConfigured, sendMail } from '../lib/mailer';
 import { confirmationEmail, getRegistrationSettings, takenPlaces } from '../lib/preRegistration';
@@ -176,7 +176,7 @@ router.post(
       }
 
       const knownStudents = await tx.student.findMany({
-        select: { id: true, firstName: true, lastName: true, birthDate: true, phone: true },
+        select: { id: true, firstName: true, lastName: true, birthDate: true, dateOfBirth: true, phone: true },
       });
       let studentsCreated = 0;
       let studentsUpdated = 0;
@@ -195,7 +195,8 @@ router.post(
           guardians: { connect: guardianIds.map((gid) => ({ id: gid })) },
         };
         const sameName = knownStudents.filter((s) => studentKey(s.firstName, s.lastName) === studentKey(child.firstName, child.lastName));
-        const known = sameName.find((s) => s.birthDate === child.birthDate) ?? sameName.find((s) => s.birthDate === null);
+        const known = sameName.find((s) => (s.birthDate ?? (s.dateOfBirth ? toYmd(s.dateOfBirth) : null)) === child.birthDate)
+          ?? sameName.find((s) => s.birthDate === null && s.dateOfBirth === null);
         const phone = file.guardians[0]?.phone ?? null;
         const student = known
           ? await tx.student.update({ where: { id: known.id }, data: { ...data, phone: known.phone ?? phone } })

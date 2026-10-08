@@ -9,8 +9,9 @@ upgrade_url="postgresql://${PGUSER}:${PGPASSWORD}@localhost:5432/sisama_upgrade_
 createdb sisama_upgrade_test
 upgrade_dir="$(mktemp -d)"
 trap 'rm -rf "$upgrade_dir"' EXIT
-git archive "$PRODUCTION_BASE_SHA" server/prisma | tar -x -C "$upgrade_dir"
-DATABASE_URL="$upgrade_url" npx --no-install prisma migrate deploy --schema "$upgrade_dir/server/prisma/schema.prisma"
+git -C "$(git rev-parse --show-toplevel)" archive "$PRODUCTION_BASE_SHA" server/prisma | tar -x -C "$upgrade_dir"
+prisma_cli="$(pwd)/node_modules/.bin/prisma"
+(cd "$upgrade_dir"; DATABASE_URL="$upgrade_url" "$prisma_cli" migrate deploy --schema "$upgrade_dir/server/prisma/schema.prisma")
 psql -d sisama_upgrade_test -v ON_ERROR_STOP=1 <<'SQL'
 INSERT INTO "Family" ("name", "updatedAt") VALUES ('Fixture family', NOW());
 INSERT INTO "Class" ("name", "tuitionFeeCents", "updatedAt") VALUES ('Fixture class', 15000, NOW());
