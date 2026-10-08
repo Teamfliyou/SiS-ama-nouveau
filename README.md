@@ -9,7 +9,11 @@
 - **Répertoire des Élèves** : Inscription, modification et suivi des élèves.
 - **Gestion des Professeurs** : Affectation aux classes et matières.
 - **Suivi Financier** : Gestion des paiements (acomptes, solde restant) avec historique complet.
+- **Paiement famille** : Plusieurs enfants réglés en une seule transaction, réduction famille de 10 % dès 2 enfants (montants et remise recalculés côté serveur à partir des frais de classe).
 - **Présences** : Pointage quotidien et historique par classe.
+- **Notes** : Matières avec coefficient, périodes (trimestres), évaluations par classe (barème et coefficient libres) et saisie des notes en grille, absences comprises.
+- **Compétences Juz Amma** : Niveau atteint sur chacune des 37 sourates (An-Naba' à An-Nas) par élève et par période : non acquis, en cours, acquis, maîtrisé. Le niveau de la période précédente est rappelé.
+- **Bulletins** : Bulletin par élève ou pour toute la classe (un par page à l'impression) avec moyennes par matière ramenées sur 20, moyenne générale pondérée, moyenne/min/max de la classe, rang, mention, compétences du Juz Amma, absences et retards de la période et appréciation générale.
 - **Import CSV** : Import en masse des élèves depuis un fichier CSV.
 - **Dashboard Dynamique** : Vue d'ensemble en temps réel des indicateurs clés (élèves, classes, revenus).
 
@@ -32,6 +36,12 @@
 | Familles | `GET/POST /api/families`, `PUT/DELETE /api/families/:id` |
 | Présences | `GET/POST /api/attendance`, `GET /api/attendance/history` |
 | Finances | `GET/POST /api/finances`, `PUT/DELETE /api/finances/:id` |
+| Paiement groupé (plusieurs enfants) | `POST /api/finances/group`, `GET/DELETE /api/finances/groups/:id` |
+| Matières | `GET/POST /api/subjects`, `PUT/DELETE /api/subjects/:id` |
+| Périodes | `GET/POST /api/terms`, `PUT/DELETE /api/terms/:id` |
+| Évaluations et notes | `GET/POST /api/evaluations`, `PUT/DELETE /api/evaluations/:id`, `GET/PUT /api/evaluations/:id/grades` |
+| Compétences Juz Amma | `GET /api/competencies/juz-amma`, `GET/PUT /api/competencies` |
+| Bulletins | `GET /api/report-cards?classId=&termId=[&studentId=]`, `PUT /api/report-cards/remark` |
 | Import CSV | `POST /api/import-csv/students`, `POST /api/import-csv/teachers` |
 | Sauvegardes | `GET /api/export`, `POST /api/import/full` |
 | Statistiques | `GET /api/stats` |

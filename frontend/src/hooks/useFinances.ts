@@ -1,12 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
 import { authFetch, safeJson } from '../utils/api';
 
+export type PaymentGroup = {
+  id: number;
+  date: string;
+  method: string | null;
+  subtotal: number;
+  discount: number;
+  total: number;
+  totalCents: number;
+};
+
 export type Payment = {
   id: number;
   amount: number;
   amountCents: number;
+  /** Part de la remise familiale imputée à cette ligne (paiement groupé). */
+  discount: number;
   date: string;
   method: string;
+  /** Renseigné quand la ligne fait partie d'un paiement de plusieurs enfants. */
+  groupId: number | null;
+  group: PaymentGroup | null;
   studentId: number;
   student: {
     id: number;
@@ -66,5 +81,14 @@ export function useFinances() {
     [reload]
   );
 
-  return { payments, loading, reload, create, update, remove };
+  /** Annule un paiement groupé complet (toutes ses lignes). */
+  const removeGroup = useCallback(
+    async (groupId: number) => {
+      await safeJson(await authFetch(`/api/finances/groups/${groupId}`, { method: 'DELETE' }));
+      await reload();
+    },
+    [reload]
+  );
+
+  return { payments, loading, reload, create, update, remove, removeGroup };
 }

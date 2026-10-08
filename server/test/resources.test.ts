@@ -58,6 +58,27 @@ describe('classes, students, finances (exact cents) and attendance', () => {
     expect(l.remaining).toBe(24.5);
   });
 
+  it('accepts the class id sent as text by the forms', async () => {
+    const token = await adminToken();
+    const cls = (await req.post('/api/classes').set(auth(token)).send({ name: 'CP', tuitionFee: 100 })).body;
+    const stu = await req
+      .post('/api/students')
+      .set(auth(token))
+      .send({ firstName: 'Ali', lastName: 'Ben', classId: String(cls.id) });
+    expect(stu.status).toBe(201);
+    expect(stu.body.classId).toBe(cls.id);
+    const teacher = await req
+      .post('/api/teachers')
+      .set(auth(token))
+      .send({ firstName: 'Omar', lastName: 'Diop', classId: String(cls.id) });
+    expect(teacher.status).toBe(201);
+    const noClass = await req.post('/api/students').set(auth(token)).send({ firstName: 'Nora', lastName: 'K', classId: '' });
+    expect(noClass.status).toBe(201);
+    expect(noClass.body.classId).toBeNull();
+    const bad = await req.post('/api/students').set(auth(token)).send({ firstName: 'X', lastName: 'Y', classId: 'abc' });
+    expect(bad.status).toBe(400);
+  });
+
   it('rejects base-10 rounding hazards in payment amounts', async () => {
     const token = await adminToken();
     const cls = (await req.post('/api/classes').set(auth(token)).send({ name: 'CM2', tuitionFee: 100 })).body;

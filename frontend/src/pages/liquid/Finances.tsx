@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CreditCard, Pencil, Plus, Receipt, Trash2, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { CreditCard, Pencil, Plus, Receipt, Trash2, TrendingDown, TrendingUp, Users, Wallet } from 'lucide-react';
 import { apiErrorMessage } from '../../utils/api';
 import { formatCurrency } from '../../utils/format';
 import { toast } from '../../utils/toast';
 import { useFinances, type Payment } from '../../hooks/useFinances';
 import { useStudents } from '../../hooks/useStudents';
+import { useClasses } from '../../hooks/useClasses';
+import FamilyPaymentForm from '../../components/FamilyPaymentForm';
 import {
   EmptyState,
   GlassButton,
@@ -20,8 +22,10 @@ const METHODS = ['Espèces', 'Virement', 'Chèque', 'Mobile Money'];
 
 export default function LiquidFinances() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { payments, create, update, remove } = useFinances();
+  const { payments, reload: reloadPayments, create, update, remove, removeGroup } = useFinances();
   const { students, reload: reloadStudents } = useStudents();
+  const { classes } = useClasses();
+  const [familyOpen, setFamilyOpen] = useState(false);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'' | 'paid' | 'unpaid'>('');
@@ -88,7 +92,11 @@ export default function LiquidFinances() {
     if (!editingPayment && !payStudentId) return;
     setSaving(true);
     try {
-      const amount = Number(payAmount);
+      const amount = Number(payAmount.replace(',', '.'));
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast.error('Le montant doit être un nombre supérieur à zéro');
+        return;
+      }
       if (editingPayment) {
         await update(editingPayment.id, { amount, method: payMethod });
         toast.success('Paiement mis à jour');
@@ -109,9 +117,11 @@ export default function LiquidFinances() {
     if (!toDelete) return;
     setDeleting(true);
     try {
-      await remove(toDelete.id);
+      // Une ligne de paiement groupé ne se supprime qu'avec tout son groupe.
+      if (toDelete.groupId !== null) await removeGroup(toDelete.groupId);
+      else await remove(toDelete.id);
       await reloadStudents();
-      toast.success('Paiement supprimé');
+      toast.success(toDelete.groupId !== null ? 'Paiement groupé annulé' : 'Paiement supprimé');
       setToDelete(null);
     } catch (err) {
       toast.error(apiErrorMessage(err));
@@ -126,9 +136,14 @@ export default function LiquidFinances() {
         title="Finances"
         subtitle="Suivi des règlements et des soldes restants."
         actions={
-          <GlassButton variant="primary" icon={<Plus className="w-4 h-4" />} onClick={() => openCreate()}>
-            Ajouter un paiement
-          </GlassButton>
+          <>
+            <GlassButton icon={<Users className="w-4 h-4" />} onClick={() => setFamilyOpen(true)}>
+              Payer plusieurs enfants
+            </GlassButton>
+            <GlassButton variant="primary" icon={<Plus className="w-4 h-4" />} onClick={() => openCreate()}>
+              Ajouter un paiement
+            </GlassButton>
+          </>
         }
       />
 
@@ -210,14 +225,19 @@ export default function LiquidFinances() {
                   </p>
                   <p className="text-xs text-slate-400">
                     {new Date(p.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })} · {p.method}
+                    {p.groupId !== null && (
+                      <> · paiement groupé{p.discount > 0 && <> (remise famille {formatCurrency(p.discount)})</>}</>
+                    )}
                   </p>
                 </div>
                 <span className="text-sm font-bold text-emerald-600 shrink-0">+{formatCurrency(p.amount)}</span>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button type="button" onClick={() => openEditPayment(p)} className="lg-icon-btn" aria-label="Modifier le paiement">
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button type="button" onClick={() => setToDelete(p)} className="lg-icon-btn hover:text-rose-600" aria-label="Supprimer le paiement">
+                  {p.groupId === null && (
+                    <button type="button" onClick={() => openEditPayment(p)} className="lg-icon-btn" aria-label="Modifier le paiement">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setToDelete(p)} className="lg-icon-btn hover:text-rose-600" aria-label={p.groupId !== null ? 'Annuler le paiement groupé' : 'Supprimer le paiement'}>
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -254,7 +274,7 @@ export default function LiquidFinances() {
           )}
           <div>
             <label className="lg-label" htmlFor="pay-amount">Montant (€)</label>
-            <input id="pay-amount" type="number" required step="0.01" min="0" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="lg-input" />
+            <input id="pay-amount" type="number" inputMode="decimal" required step="0.01" min="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="lg-input" />
           </div>
           <div>
             <label className="lg-label" htmlFor="pay-method">Méthode</label>
@@ -273,12 +293,41 @@ export default function LiquidFinances() {
         </form>
       </GlassModal>
 
+      {/* Paiement de plusieurs enfants (remise familiale) */}
+      <GlassModal open={familyOpen} onClose={() => setFamilyOpen(false)} title="Payer plusieurs enfants" size="md">
+        <FamilyPaymentForm
+          students={students}
+          classes={classes}
+          onPaid={() => {
+            setFamilyOpen(false);
+            reloadStudents().catch(() => {});
+            reloadPayments().catch(() => {});
+          }}
+          onRefresh={() => {
+            reloadStudents().catch(() => {});
+            reloadPayments().catch(() => {});
+          }}
+        />
+      </GlassModal>
+
       {/* Confirmation suppression */}
-      <GlassModal open={Boolean(toDelete)} onClose={() => setToDelete(null)} title="Supprimer le paiement" size="sm">
-        <p className="text-sm text-slate-600">
-          Supprimer le paiement de <strong>{formatCurrency(toDelete?.amount ?? 0)}</strong> pour{' '}
-          {toDelete?.student.firstName} {toDelete?.student.lastName} ?
-        </p>
+      <GlassModal
+        open={Boolean(toDelete)}
+        onClose={() => setToDelete(null)}
+        title={toDelete?.groupId != null ? 'Annuler le paiement groupé' : 'Supprimer le paiement'}
+        size="sm"
+      >
+        {toDelete?.groupId != null ? (
+          <p className="text-sm text-slate-600">
+            Ce paiement fait partie d'un paiement groupé de <strong>{formatCurrency(toDelete.group?.total ?? 0)}</strong>.
+            Toutes ses lignes (chaque enfant concerné) seront supprimées.
+          </p>
+        ) : (
+          <p className="text-sm text-slate-600">
+            Supprimer le paiement de <strong>{formatCurrency(toDelete?.amount ?? 0)}</strong> pour{' '}
+            {toDelete?.student.firstName} {toDelete?.student.lastName} ?
+          </p>
+        )}
         <div className="flex justify-end gap-2 mt-5">
           <GlassButton variant="ghost" onClick={() => setToDelete(null)}>Annuler</GlassButton>
           <GlassButton variant="danger" disabled={deleting} icon={<Trash2 className="w-4 h-4" />} onClick={handleDeletePayment}>

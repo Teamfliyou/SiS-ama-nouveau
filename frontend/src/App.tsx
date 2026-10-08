@@ -11,6 +11,10 @@ import UsersAdmin from './pages/UsersAdmin';
 import Teachers from './pages/Teachers';
 import Setup from './pages/Setup';
 import Settings from './pages/Settings';
+import Grades from './pages/Grades';
+import Competencies from './pages/Competencies';
+import ReportCards from './pages/ReportCards';
+import SchoolSettings from './pages/SchoolSettings';
 import Layout from './components/Layout';
 import ThemedPage from './components/ThemedPage';
 
@@ -53,6 +57,11 @@ function App() {
           <Route path="users" element={<ThemedPage classic={UsersAdmin} liquid={LiquidUsersAdmin} />} />
           <Route path="teachers" element={<ThemedPage classic={Teachers} liquid={LiquidTeachers} />} />
           <Route path="settings" element={<ThemedPage classic={Settings} liquid={LiquidSettings} />} />
+          {/* Scolarité : même page dans les deux apparences (le layout Liquid l'habille). */}
+          <Route path="grades" element={<Grades />} />
+          <Route path="competencies" element={<Competencies />} />
+          <Route path="report-cards" element={<ReportCards />} />
+          <Route path="school-settings" element={<SchoolSettings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

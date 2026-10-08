@@ -5,8 +5,12 @@ export type Payment = {
   id: number;
   amount: number;
   amountCents: number;
+  /** Part of the family discount credited on this line (grouped payments). */
+  discount: number;
+  discountCents: number;
   date: string;
   method: string | null;
+  groupId: number | null;
 };
 
 export type StudentFamily = {
@@ -33,8 +37,11 @@ export type Student = {
   class: { id: number; name: string; tuitionFee: number; tuitionFeeCents: number } | null;
   payments: Payment[];
   totalPaid: number;
+  totalDiscount: number;
   totalAmountDue: number;
   remaining: number;
+  /** Montant encore dû en centimes (frais de la classe − paiements − remises). */
+  remainingCents: number;
 };
 
 export type StudentParentInput = {

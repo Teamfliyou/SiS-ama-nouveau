@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCurrency, parseAmount } from './format';
+import { formatCurrency, parseAmount, firstNameFromEmail } from './format';
 
 describe('formatCurrency', () => {
   it('formats whole euros and decimals in French style', () => {
@@ -32,5 +32,20 @@ describe('parseAmount', () => {
     expect(parseAmount('')).toBeNull();
     expect(parseAmount('abc')).toBeNull();
     expect(parseAmount('-5')).toBeNull();
+  });
+});
+describe('firstNameFromEmail', () => {
+  it('takes the first name from the email local part', () => {
+    expect(firstNameFromEmail('yasmine@assoma.fr')).toBe('Yasmine');
+    expect(firstNameFromEmail('karim.zaoui@assoma.fr')).toBe('Karim');
+    expect(firstNameFromEmail('ÉLODIE_martin@assoma.fr')).toBe('Élodie');
+    expect(firstNameFromEmail('jean-pierre.dupont@assoma.fr')).toBe('Jean-Pierre');
+    expect(firstNameFromEmail('sara2@assoma.fr')).toBe('Sara');
+  });
+
+  it('returns an empty string when nothing usable', () => {
+    expect(firstNameFromEmail(null)).toBe('');
+    expect(firstNameFromEmail('')).toBe('');
+    expect(firstNameFromEmail('1234@assoma.fr')).toBe('');
   });
 });

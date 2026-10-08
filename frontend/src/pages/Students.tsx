@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   BookOpen,
   CalendarDays,
@@ -23,6 +24,10 @@ import { toast } from '../utils/toast';
 import { apiErrorMessage } from '../utils/api';
 import { useStudents, type Student, type StudentInput } from '../hooks/useStudents';
 import { useClasses } from '../hooks/useClasses';
+import { useIsMobile } from '../hooks/useIsMobile';
+import Sheet from '../components/mobile/Sheet';
+import ActionMenu from '../components/mobile/ActionMenu';
+import { mList, mInput, mAddBtn, mPrimaryBtn } from '../components/mobile/styles';
 
 const EMPTY_FORM: StudentInput = {
   firstName: '',
@@ -59,13 +64,28 @@ export default function Students() {
   const [filterStatus, setFilterStatus] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'class' | 'remaining'>('name');
 
+  // Mobile : formulaire et filtres en bottom sheet (le bureau garde la colonne fixe).
+  const isMobile = useIsMobile();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [formOpen, setFormOpen] = useState(() => !!(location.state as { openForm?: boolean } | null)?.openForm);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Consomme l'intention « ouvrir le formulaire » venant du tableau de bord.
+  useEffect(() => {
+    if ((location.state as { openForm?: boolean } | null)?.openForm) navigate(location.pathname, { replace: true, state: null });
+  }, [location, navigate]);
+
   const resetForm = () => {
     setEditing(null);
     setForm({
       ...EMPTY_FORM,
       parent: { name: '', phone: '', email: '', address: '' },
     });
+    setFormOpen(false);
   };
+
+  const openCreate = () => { resetForm(); setFormOpen(true); };
 
   const openEdit = (student: Student) => {
     setEditing(student);
@@ -86,6 +106,7 @@ export default function Students() {
         address: student.family?.address ?? '',
       },
     });
+    setFormOpen(true);
   };
 
   const updateParent = (field: 'name' | 'phone' | 'email' | 'address', value: string) => {
@@ -173,13 +194,190 @@ export default function Students() {
     return list;
   }, [students, search, filterClass, filterStatus, sortBy]);
 
+  const studentForm = (
+    <form onSubmit={handleSave} className="space-y-4 mobile:px-5">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-slate-700">Prénom</label>
+          <input required value={form.firstName} onChange={(e) => setForm((v) => ({ ...v, firstName: e.target.value }))} className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">Nom</label>
+          <input required value={form.lastName} onChange={(e) => setForm((v) => ({ ...v, lastName: e.target.value }))} className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700">Date de naissance</label>
+        <input type="date" value={form.dateOfBirth ?? ''} onChange={(e) => setForm((v) => ({ ...v, dateOfBirth: e.target.value || null }))} className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700">Classe</label>
+        <select value={form.classId ?? ''} onChange={(e) => setForm((v) => ({ ...v, classId: e.target.value ? Number(e.target.value) : null }))} className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm bg-white focus:ring-primary focus:border-primary">
+          <option value="">Sans classe</option>
+          {classes.map((c) => <option key={c.id} value={c.id}>{c.name} ({formatCurrency(c.tuitionFee)})</option>)}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700">Inscrit en 2025-2026 ?</label>
+        <select
+          value={form.wasEnrolled2025_2026 === null || form.wasEnrolled2025_2026 === undefined ? '' : form.wasEnrolled2025_2026 ? 'yes' : 'no'}
+          onChange={(e) => setForm((v) => ({ ...v, wasEnrolled2025_2026: e.target.value === '' ? null : e.target.value === 'yes' }))}
+          className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm bg-white focus:ring-primary focus:border-primary"
+        >
+          <option value="">Non renseigné</option>
+          <option value="yes">Oui</option>
+          <option value="no">Non</option>
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-slate-700">ARABE</label>
+          <input value={form.arabicCourse ?? ''} onChange={(e) => setForm((v) => ({ ...v, arabicCourse: e.target.value }))} placeholder="Oui / niveau…" className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">CORAN</label>
+          <input value={form.quranCourse ?? ''} onChange={(e) => setForm((v) => ({ ...v, quranCourse: e.target.value }))} placeholder="Oui / niveau…" className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
+        </div>
+      </div>
+
+      <div className="pt-2 border-t border-slate-200">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Parent / responsable</p>
+        <div className="space-y-3">
+          <input value={form.parent?.name ?? ''} onChange={(e) => updateParent('name', e.target.value)} placeholder="NOM & Prénom" className="block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
+          <input type="tel" inputMode="tel" autoComplete="tel" value={form.parent?.phone ?? ''} onChange={(e) => updateParent('phone', e.target.value)} placeholder="Téléphone" className="block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
+          <input type="email" value={form.parent?.email ?? ''} onChange={(e) => updateParent('email', e.target.value)} placeholder="Adresse e-mail" className="block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
+          <input value={form.parent?.address ?? ''} onChange={(e) => updateParent('address', e.target.value)} placeholder="Adresse" className="block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
+        </div>
+      </div>
+
+      <button type="submit" disabled={saving} className={'w-full flex items-center justify-center py-2 shadow-sm rounded-lg text-sm font-medium text-white transition-colors mobile:min-h-[48px] mobile:rounded-xl mobile:text-[15px] mobile:font-semibold ' + (editing ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-blue-600')}>
+        {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : editing ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+        {saving ? 'Enregistrement…' : editing ? 'Sauvegarder' : 'Inscrire'}
+      </button>
+    </form>
+  );
+
+  // ── Téléphone ──
+  const statusLabel = (st: Student) => st.remaining <= 0
+    ? <span className="text-emerald-600">Payé</span>
+    : <span className="text-orange-500">Reste {formatCurrency(st.remaining)}</span>;
+
+  const mobileView = (
+    <div className="space-y-4">
+      {/* Recherche + filtres + ajout */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <input type="search" placeholder="Rechercher un élève" value={search} onChange={(e) => setSearch(e.target.value)}
+            className={`${mInput} pl-10`} />
+        </div>
+        <button type="button" onClick={() => setFiltersOpen(true)} aria-label="Filtres"
+          className={`relative h-11 w-11 shrink-0 flex items-center justify-center rounded-xl border ${filterClass || filterStatus || sortBy !== 'name' ? 'border-primary/40 bg-blue-50 text-primary' : 'border-slate-200/80 bg-white/90 text-slate-500'}`}>
+          <SlidersHorizontal className="w-5 h-5" />
+          {(filterClass || filterStatus || sortBy !== 'name') && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />}
+        </button>
+        <button type="button" onClick={openCreate} aria-label="Inscrire un élève" className={mAddBtn}>
+          <Plus className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between px-1 text-[13px]">
+        <span className="font-medium text-slate-500">{filtered.length} élève{filtered.length > 1 ? 's' : ''}{filtered.length !== students.length ? ` sur ${students.length}` : ''}</span>
+        {hasActiveFilters && <button onClick={resetFilters} className="min-h-[32px] font-semibold text-primary">Effacer les filtres</button>}
+      </div>
+
+      {studentsLoading ? (
+        <div className="glass-surface rounded-2xl px-6 py-12 text-center text-slate-400">Chargement…</div>
+      ) : filtered.length === 0 ? (
+        <div className="glass-surface rounded-2xl px-6 py-12 text-center">
+          <Users className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+          <p className="text-[15px] font-medium text-slate-500">{students.length === 0 ? 'Aucun élève inscrit.' : 'Aucun élève ne correspond.'}</p>
+        </div>
+      ) : (
+        <ul className={mList}>
+          {filtered.map((st) => (
+            <li key={st.id} className="flex items-center gap-3 pl-4 pr-3 min-h-[64px]">
+              <button type="button" onClick={() => setDetailsStudent(st)} className="flex-1 min-w-0 flex items-center gap-3 py-3 text-left">
+                <span className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-blue-400 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                  {st.firstName[0]}{st.lastName[0]}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold text-slate-900 truncate">{st.firstName} <span className="uppercase">{st.lastName}</span></span>
+                  <span className="block text-[13px] text-slate-500 truncate">
+                    {st.class ? st.class.name : <span className="text-red-400">Sans classe</span>}
+                    <span className="mx-1.5 text-slate-300">·</span>
+                    <span className="font-medium">{statusLabel(st)}</span>
+                  </span>
+                </span>
+              </button>
+              <ActionMenu
+                title={`${st.firstName} ${st.lastName.toUpperCase()}`}
+                actions={[
+                  { label: 'Consulter la fiche', icon: Eye, onClick: () => setDetailsStudent(st) },
+                  { label: 'Modifier', icon: Pencil, onClick: () => openEdit(st) },
+                  { label: 'Supprimer', icon: Trash2, onClick: () => handleDelete(st), danger: true, disabled: deletingId === st.id },
+                ]}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Formulaire */}
+      <Sheet open={formOpen} onClose={resetForm} title={editing ? "Modifier l'élève" : 'Inscrire un élève'}>
+        {studentForm}
+      </Sheet>
+
+      {/* Filtres */}
+      <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filtrer et trier">
+        <div className="px-5 space-y-4">
+          <label className="block">
+            <span className="block text-[13px] font-semibold text-slate-600 mb-1.5">Classe</span>
+            <select value={filterClass} onChange={(e) => setFilterClass(e.target.value)} className={mInput}>
+              <option value="">Toutes les classes</option>
+              {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <option value="__none__">Sans classe</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-[13px] font-semibold text-slate-600 mb-1.5">Situation financière</span>
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={mInput}>
+              <option value="">Toutes situations</option>
+              <option value="paid">Entièrement payé</option>
+              <option value="unpaid">Solde restant</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-[13px] font-semibold text-slate-600 mb-1.5">Trier par</span>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)} className={mInput}>
+              <option value="name">Nom</option>
+              <option value="class">Classe</option>
+              <option value="remaining">Solde restant</option>
+            </select>
+          </label>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={resetFilters} className="min-h-[48px] px-4 rounded-xl bg-slate-100 text-[15px] font-semibold text-slate-600">Réinitialiser</button>
+            <button type="button" onClick={() => setFiltersOpen(false)} className={mPrimaryBtn}>
+              Afficher {filtered.length} élève{filtered.length > 1 ? 's' : ''}
+            </button>
+          </div>
+        </div>
+      </Sheet>
+    </div>
+  );
+
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div>
+      <div className="mobile:hidden">
         <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Gestion des Élèves</h2>
         <p className="mt-2 text-sm text-slate-500">Registre, informations scolaires et coordonnées des responsables.</p>
       </div>
 
+      {isMobile ? mobileView : (
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         <div className="lg:col-span-1">
           <div className={'rounded-2xl shadow-sm border p-6 transition-colors ' + (editing ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100')}>
@@ -194,70 +392,7 @@ export default function Students() {
               )}
             </div>
 
-            <form onSubmit={handleSave} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">Prénom</label>
-                  <input required value={form.firstName} onChange={(e) => setForm((v) => ({ ...v, firstName: e.target.value }))} className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">Nom</label>
-                  <input required value={form.lastName} onChange={(e) => setForm((v) => ({ ...v, lastName: e.target.value }))} className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Date de naissance</label>
-                <input type="date" value={form.dateOfBirth ?? ''} onChange={(e) => setForm((v) => ({ ...v, dateOfBirth: e.target.value || null }))} className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Classe</label>
-                <select value={form.classId ?? ''} onChange={(e) => setForm((v) => ({ ...v, classId: e.target.value ? Number(e.target.value) : null }))} className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm bg-white focus:ring-primary focus:border-primary">
-                  <option value="">Sans classe</option>
-                  {classes.map((c) => <option key={c.id} value={c.id}>{c.name} ({formatCurrency(c.tuitionFee)})</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Inscrit en 2025-2026 ?</label>
-                <select
-                  value={form.wasEnrolled2025_2026 === null || form.wasEnrolled2025_2026 === undefined ? '' : form.wasEnrolled2025_2026 ? 'yes' : 'no'}
-                  onChange={(e) => setForm((v) => ({ ...v, wasEnrolled2025_2026: e.target.value === '' ? null : e.target.value === 'yes' }))}
-                  className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm bg-white focus:ring-primary focus:border-primary"
-                >
-                  <option value="">Non renseigné</option>
-                  <option value="yes">Oui</option>
-                  <option value="no">Non</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">ARABE</label>
-                  <input value={form.arabicCourse ?? ''} onChange={(e) => setForm((v) => ({ ...v, arabicCourse: e.target.value }))} placeholder="Oui / niveau…" className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">CORAN</label>
-                  <input value={form.quranCourse ?? ''} onChange={(e) => setForm((v) => ({ ...v, quranCourse: e.target.value }))} placeholder="Oui / niveau…" className="mt-1 block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-slate-200">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Parent / responsable</p>
-                <div className="space-y-3">
-                  <input value={form.parent?.name ?? ''} onChange={(e) => updateParent('name', e.target.value)} placeholder="NOM & Prénom" className="block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
-                  <input type="tel" value={form.parent?.phone ?? ''} onChange={(e) => updateParent('phone', e.target.value)} placeholder="Téléphone" className="block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
-                  <input type="email" value={form.parent?.email ?? ''} onChange={(e) => updateParent('email', e.target.value)} placeholder="Adresse e-mail" className="block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
-                  <input value={form.parent?.address ?? ''} onChange={(e) => updateParent('address', e.target.value)} placeholder="Adresse" className="block w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-primary focus:border-primary" />
-                </div>
-              </div>
-
-              <button type="submit" disabled={saving} className={'w-full flex items-center justify-center py-2 shadow-sm rounded-lg text-sm font-medium text-white transition-colors ' + (editing ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-blue-600')}>
-                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : editing ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                {saving ? 'Enregistrement…' : editing ? 'Sauvegarder' : 'Inscrire'}
-              </button>
-            </form>
+            {studentForm}
           </div>
         </div>
 
@@ -380,11 +515,12 @@ export default function Students() {
           </div>
         </div>
       </div>
+      )}
 
-      {detailsStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={() => setDetailsStudent(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-start p-6 border-b border-slate-100">
+      <Sheet open={!!detailsStudent} onClose={() => setDetailsStudent(null)} maxWidth="max-w-3xl">
+        {detailsStudent && (
+          <div className="max-h-[92vh] overflow-y-auto mobile:max-h-none mobile:overflow-visible">
+            <div className="flex justify-between items-start p-6 border-b border-slate-100 mobile:px-5 mobile:pt-1 mobile:pb-4">
               <div className="flex items-center gap-4">
                 <div className="h-14 w-14 rounded-full bg-primary text-white flex items-center justify-center text-base font-bold">
                   {detailsStudent.firstName[0]}{detailsStudent.lastName[0]}
@@ -394,10 +530,10 @@ export default function Students() {
                   <p className="text-sm text-slate-500">{detailsStudent.class ? 'Classe ' + detailsStudent.class.name : 'Sans classe'}</p>
                 </div>
               </div>
-              <button onClick={() => setDetailsStudent(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+              <button onClick={() => setDetailsStudent(null)} aria-label="Fermer" className="text-slate-400 hover:text-slate-600 mobile:hidden"><X className="w-5 h-5" /></button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 mobile:px-5 mobile:pt-4 mobile:pb-0">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <section className="border border-slate-200 rounded-xl p-4">
                   <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><UserRound className="w-4 h-4" /> Informations élève</h4>
@@ -414,14 +550,16 @@ export default function Students() {
                   <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><UserRound className="w-4 h-4" /> Parent / responsable</h4>
                   <dl className="space-y-3 text-sm">
                     <div className="flex justify-between gap-4"><dt className="text-slate-500">NOM & Prénom</dt><dd className="font-semibold text-right">{textValue(detailsStudent.family?.name)}</dd></div>
-                    <div className="flex justify-between gap-4"><dt className="text-slate-500 flex items-center gap-2"><Phone className="w-4 h-4" />Téléphone</dt><dd className="font-semibold">{textValue(detailsStudent.family?.phone ?? detailsStudent.phone)}</dd></div>
+                    <div className="flex justify-between gap-4"><dt className="text-slate-500 flex items-center gap-2"><Phone className="w-4 h-4" />Téléphone</dt><dd className="font-semibold">{(detailsStudent.family?.phone ?? detailsStudent.phone)
+                      ? <a href={`tel:${(detailsStudent.family?.phone ?? detailsStudent.phone ?? '').replace(/\s/g, '')}`} className="mobile:text-primary">{detailsStudent.family?.phone ?? detailsStudent.phone}</a>
+                      : textValue(null)}</dd></div>
                     <div className="flex justify-between gap-4"><dt className="text-slate-500 flex items-center gap-2"><Mail className="w-4 h-4" />E-mail</dt><dd className="font-semibold text-right break-all">{textValue(detailsStudent.family?.email)}</dd></div>
                     <div className="flex justify-between gap-4"><dt className="text-slate-500 flex items-center gap-2"><MapPin className="w-4 h-4" />Adresse</dt><dd className="font-semibold text-right">{textValue(detailsStudent.family?.address)}</dd></div>
                   </dl>
                 </section>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-3 mobile:gap-2">
                 <div className="bg-slate-50 rounded-xl p-3 text-center">
                   <p className="text-xs font-semibold text-slate-400 uppercase">Total dû</p>
                   <p className="text-lg font-black text-slate-700">{formatCurrency(detailsStudent.totalAmountDue)}</p>
@@ -448,7 +586,10 @@ export default function Students() {
                         <li key={p.id} className="flex items-center justify-between px-4 py-2.5">
                           <div>
                             <p className="text-sm font-semibold text-slate-700">+{formatCurrency(p.amount)}</p>
-                            <p className="text-xs text-slate-400">{p.method}</p>
+                            <p className="text-xs text-slate-400">
+                              {p.method}
+                              {p.discount > 0 && <> · remise famille {formatCurrency(p.discount)}</>}
+                            </p>
                           </div>
                           <span className="text-xs text-slate-400">{new Date(p.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
                         </li>
@@ -457,18 +598,18 @@ export default function Students() {
                 )}
               </div>
 
-              <div className="flex justify-end gap-3">
-                <button onClick={() => { const student = detailsStudent; setDetailsStudent(null); openEdit(student); }} className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+              <div className="flex justify-end gap-3 mobile:grid mobile:grid-cols-2 mobile:gap-2">
+                <button onClick={() => { const student = detailsStudent; setDetailsStudent(null); openEdit(student); }} className="px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors mobile:order-2 mobile:min-h-[48px] mobile:rounded-xl mobile:bg-primary mobile:text-white mobile:text-[15px]">
                   Modifier la fiche
                 </button>
-                <button onClick={() => setDetailsStudent(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                <button onClick={() => setDetailsStudent(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors mobile:min-h-[48px] mobile:rounded-xl mobile:bg-slate-100 mobile:text-[15px] mobile:font-semibold">
                   Fermer
                 </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Sheet>
     </div>
   );
 }
