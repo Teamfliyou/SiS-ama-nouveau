@@ -8,12 +8,20 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import Sheet from '../components/mobile/Sheet';
 import ActionMenu from '../components/mobile/ActionMenu';
 import { mList, mInput, mAddBtn, mPrimaryBtn } from '../components/mobile/styles';
+import { ageOn, frenchDate, type Guardian } from '../utils/preRegistration';
+import { localToday } from '../utils/schedule';
 
 type Student = {
   id: number;
   firstName: string;
   lastName: string;
   phone: string | null;
+  birthDate: string | null;
+  gender: 'F' | 'M' | null;
+  medicalInfo: string | null;
+  photoOptOut: boolean;
+  canLeaveAlone: boolean;
+  guardians: Guardian[];
   classId: number | null;
   class: { id: number; name: string; tuitionFee: number } | null;
   payments: { id: number; amount: number; date: string; method: string | null }[];
@@ -568,6 +576,38 @@ export default function Students() {
             </div>
 
             <div className="p-6 space-y-5 mobile:px-5 mobile:pt-4 mobile:pb-0">
+              {/* Child file (filled from the online pre-registration) */}
+              {(detailsStudent.birthDate || detailsStudent.medicalInfo || detailsStudent.guardians?.length > 0) && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                    {detailsStudent.birthDate && (
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700">
+                        {detailsStudent.gender === 'F' ? 'Née' : detailsStudent.gender === 'M' ? 'Né' : 'Naissance'} le {frenchDate(detailsStudent.birthDate)} ({ageOn(detailsStudent.birthDate, localToday())} ans)
+                      </span>
+                    )}
+                    <span className={`px-2.5 py-1 rounded-lg ${detailsStudent.photoOptOut ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
+                      {detailsStudent.photoOptOut ? 'Refus des photos' : 'Photos autorisées'}
+                    </span>
+                    <span className={`px-2.5 py-1 rounded-lg ${detailsStudent.canLeaveAlone ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-800'}`}>
+                      {detailsStudent.canLeaveAlone ? 'Rentre seul(e)' : 'Ne rentre pas seul(e)'}
+                    </span>
+                  </div>
+                  {detailsStudent.medicalInfo && (
+                    <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800"><span className="font-semibold">Informations médicales :</span> {detailsStudent.medicalInfo}</p>
+                  )}
+                  {detailsStudent.guardians?.map((g) => (
+                    <div key={g.id} className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                      <p className="font-semibold text-slate-900">{g.firstName} {g.lastName.toUpperCase()} <span className="font-normal text-slate-500">· {g.relationship}</span></p>
+                      <p className="flex flex-wrap gap-x-4">
+                        <a href={`tel:${g.phone.replace(/\s/g, '')}`} className="text-primary">{g.phone}</a>
+                        <a href={`mailto:${g.email}`} className="text-primary break-all">{g.email}</a>
+                      </p>
+                      {g.address && <p className="text-slate-500">{g.address}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Financial summary */}
               <div className="grid grid-cols-3 gap-3 mobile:gap-2">
                 <div className="bg-slate-50 rounded-xl p-3 text-center mobile:px-1.5">

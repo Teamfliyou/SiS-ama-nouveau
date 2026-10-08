@@ -109,3 +109,12 @@ export const generalLimiter = createLimiter({
   max: GENERAL_MAX,
   key: getClientIp,
 }).middleware;
+
+// ─── Public pre-registration form (per IP) ────────────────────────────
+// A family sends one file; a few retries are allowed, mass submissions are not.
+
+export const publicFormLimiter = createLimiter({
+  windowMs: envInt(process.env.PUBLIC_FORM_RATE_WINDOW_MS, 60 * 60 * 1000),
+  max: envInt(process.env.PUBLIC_FORM_RATE_MAX, 10),
+  key: getClientIp,
+}).middleware;

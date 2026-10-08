@@ -16,31 +16,59 @@ model User {
 }
 
 model Class {
-  id              Int             @id @default(autoincrement())
-  name            String          @unique
-  tuitionFeeCents Int             @default(0)
-  students        Student[]
-  attendances     Attendance[]
-  teachers        Teacher[]
-  evaluations     Evaluation[]
-  timetableSlots  TimetableSlot[]
-  lessons         Lesson[]
-  createdAt       DateTime        @default(now())
+  id                      Int                    @id @default(autoincrement())
+  name                    String                 @unique
+  tuitionFeeCents         Int                    @default(0)
+  students                Student[]
+  attendances             Attendance[]
+  teachers                Teacher[]
+  evaluations             Evaluation[]
+  timetableSlots          TimetableSlot[]
+  lessons                 Lesson[]
+  // Online pre-registration: whether families can choose this class, the time
+  // slot shown to them ("Samedi matin") and the number of places (null = unlimited).
+  openForRegistration     Boolean                @default(false)
+  scheduleLabel           String?
+  capacity                Int?
+  preRegistrationChildren PreRegistrationChild[]
+  createdAt               DateTime               @default(now())
 }
 
 model Student {
-  id            Int               @id @default(autoincrement())
-  firstName     String
-  lastName      String
-  phone         String?
-  classId       Int?
-  class         Class?            @relation(fields: [classId], references: [id])
-  payments      Payment[]
-  attendances   Attendance[]
-  grades        Grade[]
-  surahLevels   SurahAssessment[]
-  reportRemarks ReportRemark[]
-  createdAt     DateTime          @default(now())
+  id                      Int                    @id @default(autoincrement())
+  firstName               String
+  lastName                String
+  phone                   String?
+  birthDate               String? // "YYYY-MM-DD"
+  gender                  String? // "F" | "M"
+  medicalInfo             String?
+  photoOptOut             Boolean                @default(false) // the family refuses photos of the child
+  canLeaveAlone           Boolean                @default(false) // allowed to go home alone
+  classId                 Int?
+  class                   Class?                 @relation(fields: [classId], references: [id])
+  guardians               Guardian[]
+  payments                Payment[]
+  attendances             Attendance[]
+  grades                  Grade[]
+  surahLevels             SurahAssessment[]
+  reportRemarks           ReportRemark[]
+  preRegistrationChildren PreRegistrationChild[]
+  createdAt               DateTime               @default(now())
+}
+
+// Parent or legal guardian, shared by siblings.
+model Guardian {
+  id           Int       @id @default(autoincrement())
+  relationship String // Mère, Père, Tuteur...
+  firstName    String
+  lastName     String
+  phone        String
+  email        String
+  address      String?
+  profession   String?
+  volunteer    Boolean   @default(false)
+  students     Student[]
+  createdAt    DateTime  @default(now())
 }
 
 model Payment {
@@ -235,4 +263,79 @@ model Lesson {
   @@unique([classId, date, slotId])
   @@index([classId, date])
   @@index([homeworkDueDate])
+}
+
+// ─── Pré-inscriptions en ligne ───────────────────────────────────────
+
+// Settings of the online pre-registration form (a single row, id = 1).
+model RegistrationSettings {
+  id               Int      @id @default(1)
+  isOpen           Boolean  @default(false)
+  schoolYear       String   @default("2026-2027")
+  minAge           Int      @default(4)
+  ageReferenceDate String   @default("2026-10-31") // children must be minAge on this date
+  contactEmail     String?
+  helloAssoUrl     String?
+  rulesText        String   @default("Règlement intérieur")
+  updatedAt        DateTime @updatedAt
+}
+
+// File sent by a family from the public form. Nothing reaches the student list
+// until the mosque validates it.
+model PreRegistration {
+  id            Int                       @id @default(autoincrement())
+  reference     String                    @unique // PI-2026-0001
+  status        String                    @default("NEW") // NEW, WAITLIST, VALIDATED, REFUSED
+  schoolYear    String
+  subtotalCents Int
+  discountCents Int
+  totalCents    Int
+  rulesAccepted Boolean
+  honorAttested Boolean
+  emailStatus   String? // SENT, SIMULATED, FAILED
+  emailText     String? // confirmation sent to the family, kept for the record
+  adminNote     String?
+  children      PreRegistrationChild[]
+  guardians     PreRegistrationGuardian[]
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  @@index([status])
+}
+
+model PreRegistrationChild {
+  id                Int             @id @default(autoincrement())
+  preRegistrationId Int
+  preRegistration   PreRegistration @relation(fields: [preRegistrationId], references: [id], onDelete: Cascade)
+  firstName         String
+  lastName          String
+  birthDate         String // "YYYY-MM-DD"
+  gender            String // "F" | "M"
+  firstEnrollment   Boolean
+  classId           Int?
+  class             Class?          @relation(fields: [classId], references: [id], onDelete: SetNull)
+  feeCents          Int
+  waitlisted        Boolean         @default(false) // the class was full when the file was sent
+  medicalInfo       String?
+  photoOptOut       Boolean         @default(false)
+  canLeaveAlone     Boolean         @default(false)
+  // Student created (or updated) when the file is validated.
+  studentId         Int?
+  student           Student?        @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@index([classId])
+}
+
+model PreRegistrationGuardian {
+  id                Int             @id @default(autoincrement())
+  preRegistrationId Int
+  preRegistration   PreRegistration @relation(fields: [preRegistrationId], references: [id], onDelete: Cascade)
+  relationship      String
+  firstName         String
+  lastName          String
+  phone             String
+  email             String
+  address           String?
+  profession        String?
+  volunteer         Boolean         @default(false)
 }

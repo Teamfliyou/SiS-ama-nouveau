@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { API_BASE, clearAuth } from '../utils/api';
 
 export default function Login() {
@@ -103,6 +103,11 @@ export default function Login() {
             {message}
           </div>
         )}
+
+        <p className="mt-8 pt-6 border-t border-slate-100 text-center text-sm text-slate-500">
+          Vous êtes parent ?{' '}
+          <Link to="/preinscription" className="font-semibold text-primary hover:underline">Pré-inscrire mon enfant</Link>
+        </p>
       </div>
     </div>
   );

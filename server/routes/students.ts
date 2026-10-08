@@ -15,8 +15,24 @@ type StudentRow = {
   firstName: string;
   lastName: string;
   phone: string | null;
+  birthDate: string | null;
+  gender: string | null;
+  medicalInfo: string | null;
+  photoOptOut: boolean;
+  canLeaveAlone: boolean;
   classId: number | null;
   createdAt: Date;
+  guardians?: {
+    id: number;
+    relationship: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string;
+    address: string | null;
+    profession: string | null;
+    volunteer: boolean;
+  }[];
   class: { id: number; name: string; tuitionFeeCents: number } | null;
   payments: {
     id: number;
@@ -35,10 +51,31 @@ const mapStudent = (s: StudentRow) => {
     firstName: s.firstName,
     lastName: s.lastName,
     phone: s.phone,
+    birthDate: s.birthDate,
+    gender: s.gender,
+    medicalInfo: s.medicalInfo,
+    photoOptOut: s.photoOptOut,
+    canLeaveAlone: s.canLeaveAlone,
+    guardians: (s.guardians ?? []).map((g) => ({
+      id: g.id,
+      relationship: g.relationship,
+      firstName: g.firstName,
+      lastName: g.lastName,
+      phone: g.phone,
+      email: g.email,
+      address: g.address,
+      profession: g.profession,
+      volunteer: g.volunteer,
+    })),
     classId: s.classId,
     createdAt: s.createdAt,
     class: s.class
-      ? { id: s.class.id, name: s.class.name, tuitionFeeCents: s.class.tuitionFeeCents }
+      ? {
+          id: s.class.id,
+          name: s.class.name,
+          tuitionFeeCents: s.class.tuitionFeeCents,
+          tuitionFee: centsToEuros(s.class.tuitionFeeCents),
+        }
       : null,
     payments: s.payments.map((p) => ({
       id: p.id,
@@ -67,7 +104,7 @@ router.get(
   '/',
   asyncHandler(async (_req, res) => {
     const students = await prisma.student.findMany({
-      include: { class: true, payments: true },
+      include: { class: true, payments: true, guardians: { orderBy: { id: 'asc' } } },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
     res.json((students as StudentRow[]).map(mapStudent));

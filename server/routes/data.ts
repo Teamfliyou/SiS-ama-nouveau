@@ -64,6 +64,18 @@ const nullableText = (max: number) =>
     .optional()
     .transform((v) => v || null);
 
+// Parent or legal guardian (of a student, or of a pre-registration file).
+const guardianImportSchema = z.object({
+  relationship: z.string().trim().min(1).max(40),
+  firstName: z.string().trim().min(1).max(120),
+  lastName: z.string().trim().min(1).max(120),
+  phone: z.string().trim().min(1).max(30),
+  email: z.string().trim().toLowerCase().min(1).max(320),
+  address: nullableText(200),
+  profession: nullableText(80),
+  volunteer: z.boolean().default(false),
+});
+
 // Teacher referenced by a course or a session: matched by email, else by name.
 const teacherRefSchema = z
   .object({ firstName: z.string(), lastName: z.string(), email: z.string().nullable().optional() })
@@ -79,6 +91,9 @@ const importPayloadSchema = z.object({
         name: z.string().trim().min(1).max(120),
         tuitionFee: euroNumber,
         tuitionFeeCents: centsNumber,
+        openForRegistration: z.boolean().optional(),
+        scheduleLabel: nullableText(80),
+        capacity: z.number().int().min(1).max(500).nullable().optional(),
       })
     )
     .max(MAX_ITEMS)
@@ -90,10 +105,66 @@ const importPayloadSchema = z.object({
         firstName: z.string().trim().min(1).max(120),
         lastName: z.string().trim().min(1).max(120),
         phone: optionalPhone,
+        birthDate: attendanceDateSchema.nullable().optional(),
+        gender: z.enum(['F', 'M']).nullable().optional(),
+        medicalInfo: nullableText(1000),
+        photoOptOut: z.boolean().optional(),
+        canLeaveAlone: z.boolean().optional(),
         class: z.object({ name: z.string() }).nullable().optional(),
       })
     )
     .max(MAX_ITEMS)
+    .optional(),
+  guardians: z.array(guardianImportSchema.extend({ students: z.array(z.object({ id: z.number().int() })).default([]) })).max(MAX_ITEMS).optional(),
+  preRegistrations: z
+    .array(
+      z.object({
+        reference: z.string().trim().min(1).max(40),
+        status: z.enum(['NEW', 'WAITLIST', 'VALIDATED', 'REFUSED']),
+        schoolYear: z.string().trim().min(1).max(20),
+        subtotalCents: z.number().int().nonnegative().max(MAX_CENTS),
+        discountCents: z.number().int().nonnegative().max(MAX_CENTS),
+        totalCents: z.number().int().nonnegative().max(MAX_CENTS),
+        rulesAccepted: z.boolean(),
+        honorAttested: z.boolean(),
+        emailStatus: z.string().max(20).nullable().optional(),
+        emailText: z.string().max(20_000).nullable().optional(),
+        adminNote: nullableText(1000),
+        createdAt: paymentDateSchema,
+        children: z
+          .array(
+            z.object({
+              firstName: z.string().trim().min(1).max(120),
+              lastName: z.string().trim().min(1).max(120),
+              birthDate: attendanceDateSchema,
+              gender: z.enum(['F', 'M']),
+              firstEnrollment: z.boolean(),
+              feeCents: z.number().int().nonnegative().max(MAX_CENTS),
+              waitlisted: z.boolean(),
+              medicalInfo: nullableText(1000),
+              photoOptOut: z.boolean(),
+              canLeaveAlone: z.boolean(),
+              class: z.object({ name: z.string() }).nullable().optional(),
+              studentId: z.number().int().nullable().optional(),
+            })
+          )
+          .max(20),
+        guardians: z.array(guardianImportSchema).max(2),
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
+  registrationSettings: z
+    .object({
+      isOpen: z.boolean(),
+      schoolYear: z.string().trim().min(1).max(20),
+      minAge: z.number().int().min(0).max(18),
+      ageReferenceDate: attendanceDateSchema,
+      contactEmail: nullableText(320),
+      helloAssoUrl: nullableText(500),
+      rulesText: z.string().trim().min(1).max(20_000),
+    })
+    .nullable()
     .optional(),
   teachers: z
     .array(
@@ -272,6 +343,9 @@ router.get(
       reportRemarks,
       timetableSlots,
       lessons,
+      guardians,
+      preRegistrations,
+      registrationSettings,
     ] = await Promise.all([
       prisma.class.findMany({ orderBy: { name: 'asc' } }),
       prisma.student.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } }),
@@ -297,6 +371,15 @@ router.get(
         orderBy: [{ classId: 'asc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
       }),
       prisma.lesson.findMany({ include: scheduleRefs, orderBy: [{ date: 'asc' }, { id: 'asc' }] }),
+      prisma.guardian.findMany({ include: { students: { select: { id: true } } }, orderBy: { id: 'asc' } }),
+      prisma.preRegistration.findMany({
+        include: {
+          children: { include: { class: { select: { name: true } } }, orderBy: { id: 'asc' } },
+          guardians: { orderBy: { id: 'asc' } },
+        },
+        orderBy: { id: 'asc' },
+      }),
+      prisma.registrationSettings.findUnique({ where: { id: 1 } }),
     ]);
     res.setHeader(
       'Content-Disposition',
@@ -304,7 +387,7 @@ router.get(
     );
     res.json({
       exportDate: new Date().toISOString(),
-      version: '4',
+      version: '5',
       classes,
       students,
       teachers,
@@ -318,6 +401,9 @@ router.get(
       reportRemarks,
       timetableSlots,
       lessons,
+      guardians,
+      preRegistrations,
+      registrationSettings,
     });
   })
 );
@@ -346,6 +432,9 @@ router.post(
       reportRemarks = [],
       timetableSlots = [],
       lessons = [],
+      guardians = [],
+      preRegistrations = [],
+      registrationSettings = null,
     } = payload;
 
     const counts = await prisma.$transaction(async (tx) => {
@@ -424,7 +513,15 @@ router.post(
         const key = normalizeKey(c.name);
         if (seenClasses.has(key)) continue;
         const tuitionFeeCents = c.tuitionFeeCents ?? eurosToCents(c.tuitionFee ?? 0);
-        const created = await tx.class.create({ data: { name: c.name, tuitionFeeCents } });
+        const created = await tx.class.create({
+          data: {
+            name: c.name,
+            tuitionFeeCents,
+            openForRegistration: c.openForRegistration ?? false,
+            scheduleLabel: c.scheduleLabel,
+            capacity: c.capacity ?? null,
+          },
+        });
         classMap.set(key, created.id);
         seenClasses.add(key);
         classesCreated++;
@@ -443,6 +540,11 @@ router.post(
               firstName: st.firstName,
               lastName: st.lastName,
               phone: st.phone ?? null,
+              birthDate: st.birthDate ?? null,
+              gender: st.gender ?? null,
+              medicalInfo: st.medicalInfo,
+              photoOptOut: st.photoOptOut ?? false,
+              canLeaveAlone: st.canLeaveAlone ?? false,
               classId: resolveClassId(st.class?.name),
             },
           });
@@ -665,7 +767,64 @@ router.post(
         lessonsCreated++;
       }
 
+      // ─── Guardians and pre-registrations (v5 backups) ─────────────────
+      // A guardian is matched by email, a pre-registration file by its number.
+      let guardiansCreated = 0;
+      const guardianIds = new Map(
+        (await tx.guardian.findMany({ select: { id: true, email: true } })).map((g) => [normalizeKey(g.email), g.id])
+      );
+      for (const { students: linked, ...g } of guardians) {
+        const key = normalizeKey(g.email);
+        let guardianId = guardianIds.get(key);
+        if (guardianId === undefined) {
+          guardianId = (await tx.guardian.create({ data: g })).id;
+          guardianIds.set(key, guardianId);
+          guardiansCreated++;
+        }
+        const studentIds = linked.flatMap((s) => {
+          const sid = studentMap.get(s.id);
+          return sid === undefined ? [] : [{ id: sid }];
+        });
+        if (studentIds.length) {
+          await tx.guardian.update({ where: { id: guardianId }, data: { students: { connect: studentIds } } });
+        }
+      }
+
+      let preRegistrationsCreated = 0;
+      const knownReferences = new Set(
+        (await tx.preRegistration.findMany({ select: { reference: true } })).map((p) => p.reference)
+      );
+      for (const { children, guardians: fileGuardians, createdAt, ...file } of preRegistrations) {
+        if (knownReferences.has(file.reference)) continue;
+        knownReferences.add(file.reference);
+        await tx.preRegistration.create({
+          data: {
+            ...file,
+            ...(createdAt ? { createdAt: new Date(createdAt) } : {}),
+            children: {
+              create: children.map(({ class: cls, studentId, ...child }) => ({
+                ...child,
+                classId: resolveClassId(cls?.name),
+                studentId: studentId !== null && studentId !== undefined ? studentMap.get(studentId) ?? null : null,
+              })),
+            },
+            guardians: { create: fileGuardians },
+          },
+        });
+        preRegistrationsCreated++;
+      }
+
+      if (registrationSettings) {
+        await tx.registrationSettings.upsert({
+          where: { id: 1 },
+          update: registrationSettings,
+          create: { id: 1, ...registrationSettings },
+        });
+      }
+
       return {
+        guardiansCreated,
+        preRegistrationsCreated,
         success: true,
         gradesCreated,
         competenciesCreated,
