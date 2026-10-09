@@ -184,6 +184,8 @@ describe('Quran competencies', () => {
     expect(levels.map((l) => l.target)).toEqual([null, null, null, null, 8, 14, 20, 28, 38, 48, 60]);
     expect(ref.body.hizbs).toHaveLength(56);
     expect(ref.body.hizbs[43]).toMatchObject({ number: 44, juz: 22, surahName: 'Saba' });
+    // Second half of juz 16 starts with Ta-Ha (Madina mushaf).
+    expect(ref.body.hizbs[31]).toMatchObject({ number: 32, juz: 16, surah: 20, surahName: 'Ta-Ha', verse: 1 });
     expect(levels[0].surahs.map((s) => s.number)).toEqual([1, ...Array.from({ length: 16 }, (_, i) => 114 - i)]);
     expect(levels[1].surahs.map((s) => s.number).sort((a, b) => a - b)[0]).toBe(87);
     expect(levels[2].surahs.map((s) => s.number)).toContain(78);
