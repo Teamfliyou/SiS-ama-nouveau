@@ -121,13 +121,16 @@ model Teacher {
 model Attendance {
   id        Int     @id @default(autoincrement())
   date      String // "YYYY-MM-DD"
+  // Half-day of the roll call: AM (courses starting before 13:00) or PM.
+  // DAY marks the roll calls taken per day before half-days existed.
+  period    String  @default("DAY")
   studentId Int
   classId   Int
   status    String  @default("PRESENT") // PRESENT, ABSENT, LATE
   student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
 
-  @@unique([date, studentId])
+  @@unique([date, period, studentId])
 }
 
 // ─── Scolarité : notes, compétences Juz Amma, bulletins ──────────────

@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, expect } from 'vitest';
-import { req, resetDb, adminToken, auth } from './helpers';
+import { req, resetDb, adminToken, auth, morningCourseEveryDay } from './helpers';
 import { computeClassResults, mentionFor } from '../lib/reportCard';
 
 type Ctx = { token: string; classId: number; termId: number; students: { id: number }[] };
@@ -389,12 +389,15 @@ describe('report cards', () => {
       ],
     });
     // Attendance inside and outside the term.
+    await morningCourseEveryDay(ctx.token, ctx.classId);
     await req.post('/api/attendance').set(auth(ctx.token)).send({
       date: '2026-10-04',
+      period: 'AM',
       records: [{ studentId: a.id, status: 'ABSENT' }],
     });
     await req.post('/api/attendance').set(auth(ctx.token)).send({
-      date: '2027-02-01',
+      date: '2026-08-31',
+      period: 'AM',
       records: [{ studentId: a.id, status: 'ABSENT' }],
     });
     await req

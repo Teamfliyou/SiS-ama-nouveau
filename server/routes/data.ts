@@ -220,6 +220,8 @@ const importPayloadSchema = z.object({
     .array(
       z.object({
         date: attendanceDateSchema,
+        // Backups older than half-day roll calls have no period: whole day.
+        period: z.enum(['AM', 'PM', 'DAY']).default('DAY'),
         studentId: z.number().int().optional(),
         classId: z.number().int().optional(),
         status: z.enum(['PRESENT', 'ABSENT', 'LATE']).default('PRESENT'),
@@ -632,9 +634,9 @@ router.post(
             : null;
         if (newStudentId === undefined || newClassId === null) continue;
         await tx.attendance.upsert({
-          where: { date_studentId: { date: a.date, studentId: newStudentId } },
+          where: { date_period_studentId: { date: a.date, period: a.period, studentId: newStudentId } },
           update: { status: a.status },
-          create: { date: a.date, studentId: newStudentId, classId: newClassId, status: a.status },
+          create: { date: a.date, period: a.period, studentId: newStudentId, classId: newClassId, status: a.status },
         });
         attendancesCreated++;
       }
