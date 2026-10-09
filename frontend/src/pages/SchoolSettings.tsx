@@ -10,7 +10,7 @@ const inputCls =
 const card = 'bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mobile:p-4';
 const iconBtn = 'inline-flex items-center p-1.5 border rounded-md';
 
-/** Subjects (graded with marks) and grading periods. The Juz Amma is not a subject. */
+/** Subjects (graded with marks) and grading periods. The Quran is not a subject: it is assessed by competencies. */
 export default function SchoolSettings() {
   const { subjects, terms, reload } = useSchoolRefs();
 
@@ -86,7 +86,7 @@ export default function SchoolSettings() {
       <div className="mobile:hidden">
         <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Matières & périodes</h2>
         <p className="mt-2 text-sm text-slate-500">
-          Les matières sont notées et apparaissent sur le bulletin avec leur coefficient. Le Juz Amma n'est pas une
+          Les matières sont notées et apparaissent sur le bulletin avec leur coefficient. Le Coran n'est pas une
           matière : il est évalué par compétences, sourate par sourate.
         </p>
       </div>

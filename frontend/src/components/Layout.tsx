@@ -59,7 +59,7 @@ export default function Layout() {
     { name: 'Emploi du temps', href: '/timetable',    icon: CalendarDays },
     { name: 'Cahier de textes', href: '/lessons',     icon: NotebookText },
     { name: 'Notes',           href: '/grades',       icon: NotebookPen },
-    { name: 'Juz Amma',        href: '/competencies', icon: Sparkles },
+    { name: 'Coran',           href: '/competencies', icon: Sparkles },
     { name: 'Bulletins',       href: '/report-cards', icon: FileText },
     { name: 'Matières & périodes', href: '/school-settings', icon: BookMarked },
     { name: 'Import CSV',      href: '/import-csv',   icon: UploadCloud },

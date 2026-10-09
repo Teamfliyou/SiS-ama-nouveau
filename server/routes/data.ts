@@ -6,7 +6,7 @@ import { asyncHandler } from '../lib/errors';
 import { validate, isRealDateString, timeSchema } from '../lib/validate';
 import { normalizeKey, studentKey } from '../lib/dedupe';
 import { eurosToCents } from '../lib/money';
-import { COMPETENCY_LEVELS, SURAH_NUMBERS } from '../lib/juzAmma';
+import { COMPETENCY_LEVELS, SURAH_NUMBERS, MAX_QURAN_LEVEL, MAP_HIZBS, QURAN_PATH_CODES } from '../lib/quran';
 
 const router = Router();
 
@@ -110,6 +110,8 @@ const importPayloadSchema = z.object({
         medicalInfo: nullableText(1000),
         photoOptOut: z.boolean().optional(),
         canLeaveAlone: z.boolean().optional(),
+        quranLevel: z.number().int().min(1).max(MAX_QURAN_LEVEL).optional(),
+        quranPath: z.enum(QURAN_PATH_CODES).optional(),
         class: z.object({ name: z.string() }).nullable().optional(),
       })
     )
@@ -270,6 +272,18 @@ const importPayloadSchema = z.object({
     )
     .max(MAX_ITEMS * 4)
     .optional(),
+  rubAssessments: z
+    .array(
+      z.object({
+        studentId: z.number().int(),
+        hizb: z.number().int().min(1).max(MAP_HIZBS),
+        quarter: z.number().int().min(1).max(4),
+        level: z.enum(COMPETENCY_LEVELS),
+        term: z.object({ name: z.string() }),
+      })
+    )
+    .max(MAX_ITEMS * 4 * 4)
+    .optional(),
   reportRemarks: z
     .array(
       z.object({
@@ -340,6 +354,7 @@ router.get(
       terms,
       evaluations,
       surahAssessments,
+      rubAssessments,
       reportRemarks,
       timetableSlots,
       lessons,
@@ -365,6 +380,7 @@ router.get(
         orderBy: { date: 'asc' },
       }),
       prisma.surahAssessment.findMany({ include: { term: { select: { name: true } } } }),
+      prisma.rubAssessment.findMany({ include: { term: { select: { name: true } } } }),
       prisma.reportRemark.findMany({ include: { term: { select: { name: true } } } }),
       prisma.timetableSlot.findMany({
         include: scheduleRefs,
@@ -398,6 +414,7 @@ router.get(
       terms,
       evaluations,
       surahAssessments,
+      rubAssessments,
       reportRemarks,
       timetableSlots,
       lessons,
@@ -429,6 +446,7 @@ router.post(
       terms = [],
       evaluations = [],
       surahAssessments = [],
+      rubAssessments = [],
       reportRemarks = [],
       timetableSlots = [],
       lessons = [],
@@ -545,6 +563,8 @@ router.post(
               medicalInfo: st.medicalInfo,
               photoOptOut: st.photoOptOut ?? false,
               canLeaveAlone: st.canLeaveAlone ?? false,
+              quranLevel: st.quranLevel ?? 1,
+              quranPath: st.quranPath ?? 'BOTTOM_UP',
               classId: resolveClassId(st.class?.name),
             },
           });
@@ -679,6 +699,16 @@ router.post(
           skipDuplicates: true,
         })
       ).count;
+      await tx.rubAssessment.createMany({
+        data: byStudentAndTerm(rubAssessments).map(({ item, studentId, termId }) => ({
+          studentId,
+          termId,
+          hizb: item.hizb,
+          quarter: item.quarter,
+          level: item.level,
+        })),
+        skipDuplicates: true,
+      });
       await tx.reportRemark.createMany({
         data: byStudentAndTerm(reportRemarks).map(({ item, studentId, termId }) => ({
           studentId,

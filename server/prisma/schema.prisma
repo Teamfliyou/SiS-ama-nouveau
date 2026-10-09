@@ -44,6 +44,8 @@ model Student {
   medicalInfo             String?
   photoOptOut             Boolean                @default(false) // the family refuses photos of the child
   canLeaveAlone           Boolean                @default(false) // allowed to go home alone
+  quranLevel              Int                    @default(1) // Quran programme level (1 to 11), see lib/quran.ts
+  quranPath               String                 @default("BOTTOM_UP") // Dar Al Coran learning path, see lib/quran.ts
   classId                 Int?
   class                   Class?                 @relation(fields: [classId], references: [id])
   guardians               Guardian[]
@@ -51,6 +53,7 @@ model Student {
   attendances             Attendance[]
   grades                  Grade[]
   surahLevels             SurahAssessment[]
+  rubLevels               RubAssessment[]
   reportRemarks           ReportRemark[]
   preRegistrationChildren PreRegistrationChild[]
   createdAt               DateTime               @default(now())
@@ -150,6 +153,7 @@ model Term {
   endDate       String // "YYYY-MM-DD"
   evaluations   Evaluation[]
   surahLevels   SurahAssessment[]
+  rubLevels     RubAssessment[]
   reportRemarks ReportRemark[]
   createdAt     DateTime          @default(now())
 }
@@ -197,6 +201,21 @@ model SurahAssessment {
   term        Term    @relation(fields: [termId], references: [id], onDelete: Restrict)
 
   @@unique([studentId, termId, surahNumber])
+}
+
+// Dar Al Coran (levels 5 to 11): competency level reached on one rob' (quarter)
+// of a hizb (1 to 56) for a term. A hizb is acquired once its 4 rob' are.
+model RubAssessment {
+  id        Int     @id @default(autoincrement())
+  hizb      Int // 1 to 56
+  quarter   Int // 1 to 4
+  level     String // NOT_ACQUIRED, IN_PROGRESS, ACQUIRED, MASTERED
+  studentId Int
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId    Int
+  term      Term    @relation(fields: [termId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, termId, hizb, quarter])
 }
 
 // General appreciation written on a student's report card for a term.
