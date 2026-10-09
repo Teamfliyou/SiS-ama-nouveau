@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { BookOpen, CalendarRange, FileText, Printer, Save, User } from 'lucide-react';
 import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
 import { toast } from '../utils/toast';
-import { formatDay, formatScore, levelInfo, LEVELS, type Term, type Surah, type CompetencyLevel } from '../utils/school';
+import { formatDay, formatScore, levelInfo, LEVELS, QUARTER_LABELS, type Term, type Surah, type CompetencyLevel } from '../utils/school';
 import { useSchoolRefs, currentTermId } from '../components/school/useSchoolRefs';
 import SelectField from '../components/school/SelectField';
 
@@ -30,7 +30,15 @@ type Report = {
     level: number;
     levelName: string;
     levelDescription: string;
+    unit: 'surah' | 'hizb';
+    target: number | null;
     surahs: (Surah & { level: CompetencyLevel | null })[];
+    /** Map of the 60 hizbs; `quarters` is null for 57 to 60 (assessed through their surahs). */
+    hizbs: { number: number; from: string; to: string; quarters: (CompetencyLevel | null)[] | null; memorized: boolean; thisTerm: boolean }[];
+    hizbsMemorized: number;
+    hizbsTotal: number;
+    path: string | null;
+    next: { hizb: number; quarter: number; from: string } | null;
     progress: { level: number; memorized: number; total: number; complete: boolean }[];
     summary: { assessed: number; memorized: number; counts: Record<CompetencyLevel, number> };
   };
@@ -202,25 +210,68 @@ export default function ReportCards() {
                   <h4 className="mt-5 mb-2 font-bold uppercase text-xs tracking-wide text-slate-600">
                     Compétences Coran : {r.quran.levelName} ({r.quran.levelDescription})
                   </h4>
-                  <div className="grid grid-cols-3 gap-x-4 mobile:grid-cols-1 text-xs">
-                    {r.quran.surahs.map((su) => {
-                      const lvl = levelInfo(su.level);
-                      return (
-                        <div key={su.number} className="flex items-center justify-between border-b border-slate-200 py-1 print:py-0.5">
-                          <span className="truncate"><span className="text-slate-400">{su.number}.</span> {su.name}</span>
-                          <span className={`ml-2 shrink-0 inline-flex items-center justify-center w-7 h-5 rounded border font-bold ${lvl ? lvl.color : 'border-slate-200 text-slate-300'}`}>
-                            {lvl ? lvl.short : '·'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {r.quran.unit === 'surah' ? (
+                    <div className="grid grid-cols-3 gap-x-4 mobile:grid-cols-1 text-xs">
+                      {r.quran.surahs.map((su) => {
+                        const lvl = levelInfo(su.level);
+                        return (
+                          <div key={su.number} className="flex items-center justify-between border-b border-slate-200 py-1 print:py-0.5">
+                            <span className="truncate"><span className="text-slate-400">{su.number}.</span> {su.name}</span>
+                            <span className={`ml-2 shrink-0 inline-flex items-center justify-center w-7 h-5 rounded border font-bold ${lvl ? lvl.color : 'border-slate-200 text-slate-300'}`}>
+                              {lvl ? lvl.short : '·'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm">
+                        <b>{r.quran.hizbsMemorized} hizbs acquis sur {r.quran.hizbsTotal}</b>
+                        {r.quran.target !== null && (
+                          <> · objectif du niveau : {r.quran.target} {r.quran.hizbsMemorized >= r.quran.target ? '✓' : ''}</>
+                        )}
+                        {r.quran.path && <> · parcours : {r.quran.path}</>}
+                      </p>
+                      {r.quran.next && (
+                        <p className="text-xs text-slate-600">
+                          Prochaine étape : hizb {r.quran.next.hizb}, {QUARTER_LABELS[r.quran.next.quarter - 1]} ({r.quran.next.from})
+                        </p>
+                      )}
+                      <div className="mt-1.5 h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div className="h-full bg-emerald-500" style={{ width: `${(r.quran.hizbsMemorized / r.quran.hizbsTotal) * 100}%` }} />
+                      </div>
+                      {/* The 60 hizbs, 4 rob' each; worked on this term = bold frame */}
+                      <div className="mt-2 grid grid-cols-12 mobile:grid-cols-6 gap-1 text-[9px]">
+                        {r.quran.hizbs.map((h) => (
+                          <div key={h.number} title={`${h.from} → ${h.to}`}
+                            className={`rounded border px-0.5 py-0.5 ${h.thisTerm ? 'border-slate-700' : 'border-slate-200'} ${h.memorized ? 'bg-emerald-50' : ''}`}>
+                            <span className="block text-center font-bold text-slate-600">{h.number}</span>
+                            <span className="grid grid-cols-4 gap-px">
+                              {[0, 1, 2, 3].map((i) => {
+                                const lvl = h.quarters ? levelInfo(h.quarters[i]) : h.memorized ? levelInfo('ACQUIRED') : null;
+                                return <span key={i} className={`h-1 rounded-sm ${lvl ? lvl.color.split(' ')[0] : 'bg-slate-200'}`} />;
+                              })}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {r.quran.hizbs.some((h) => h.thisTerm) && (
+                        <p className="mt-1.5 text-xs text-slate-600">
+                          Travaillés cette période : {r.quran.hizbs.filter((h) => h.thisTerm).map((h) => `hizb ${h.number}${h.memorized ? ' ✓' : ''}`).join(', ')}
+                        </p>
+                      )}
+                    </>
+                  )}
                   <p className="mt-2 flex flex-wrap gap-x-4 text-xs text-slate-700">
-                    {r.quran.progress.map((p) => (
+                    {r.quran.progress.filter((p) => p.level <= 4 || p.level === r.quran.level).map((p) => (
                       <span key={p.level} className={p.level === r.quran.level ? 'font-bold' : ''}>
                         Niveau {p.level} : {p.complete ? 'validé ✓' : `${p.memorized}/${p.total}`}
                       </span>
                     ))}
+                    {r.quran.unit === 'surah' && r.quran.hizbsMemorized > 0 && (
+                      <span>Hizbs : {r.quran.hizbsMemorized}/{r.quran.hizbsTotal}</span>
+                    )}
                   </p>
                   <p className="mt-1 flex flex-wrap gap-x-4 text-[11px] text-slate-500">
                     {LEVELS.map((l) => <span key={l.code}><b>{l.short}</b> : {l.label}</span>)}

@@ -4,7 +4,17 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, reportRemarkSchema, parseId } from '../lib/validate';
 import { computeClassResults } from '../lib/reportCard';
-import { QURAN_LEVELS, levelProgress, summarizeLevels } from '../lib/quran';
+import {
+  QURAN_LEVELS,
+  QURAN_PATHS,
+  PROGRAMME_HIZBS,
+  TOTAL_HIZBS,
+  levelProgress,
+  memorizedHizbs,
+  nextRub,
+  rubNumber,
+  summarizeLevels,
+} from '../lib/quran';
 
 const router = Router();
 
@@ -31,7 +41,7 @@ router.get(
 
     const students = await prisma.student.findMany({
       where: { classId: cid },
-      select: { id: true, firstName: true, lastName: true, quranLevel: true },
+      select: { id: true, firstName: true, lastName: true, quranLevel: true, quranPath: true },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
     if (sid !== null && !students.some((s) => s.id === sid)) {
@@ -40,7 +50,9 @@ router.get(
     const ids = students.map((s) => s.id);
     const wanted = sid === null ? ids : [sid];
 
-    const [subjects, evaluations, attendance, surahLevels, remarks, teachers] = await Promise.all([
+    const pastAndCurrent = { studentId: { in: wanted }, term: { startDate: { lte: term.startDate } } };
+    const ascending = { term: { startDate: 'asc' } } as const;
+    const [subjects, evaluations, attendance, surahLevels, rubLevels, remarks, teachers] = await Promise.all([
       prisma.subject.findMany(),
       prisma.evaluation.findMany({ where: { classId: cid, termId: tid }, include: { grades: true } }),
       prisma.attendance.groupBy({
@@ -48,12 +60,9 @@ router.get(
         where: { studentId: { in: wanted }, date: { gte: term.startDate, lte: term.endDate } },
         _count: { _all: true },
       }),
-      // This term and the earlier ones, oldest first: the latest level per surah wins.
-      prisma.surahAssessment.findMany({
-        where: { studentId: { in: wanted }, term: { startDate: { lte: term.startDate } } },
-        include: { term: { select: { startDate: true } } },
-        orderBy: { term: { startDate: 'asc' } },
-      }),
+      // This term and the earlier ones, oldest first: the latest level per surah (or rob') wins.
+      prisma.surahAssessment.findMany({ where: pastAndCurrent, orderBy: ascending }),
+      prisma.rubAssessment.findMany({ where: pastAndCurrent, orderBy: ascending }),
       prisma.reportRemark.findMany({ where: { studentId: { in: wanted }, termId: tid } }),
       prisma.teacher.findMany({ where: { classId: cid }, select: { firstName: true, lastName: true, subject: true } }),
     ]);
@@ -67,9 +76,14 @@ router.get(
           attendance.find((a) => a.studentId === s.id && a.status === status)?._count._all ?? 0;
         const own = surahLevels.filter((a) => a.studentId === s.id);
         const latest = new Map(own.map((a) => [a.surahNumber, a.level] as const));
-        const thisTerm = own.filter((a) => a.termId === tid).map((a) => a.level);
+        const ownRubs = rubLevels.filter((a) => a.studentId === s.id);
+        const latestRubs = new Map(ownRubs.map((a) => [a.rub, a.level] as const));
+        const thisTerm = [...own, ...ownRubs].filter((a) => a.termId === tid).map((a) => a.level);
         const level = QURAN_LEVELS.find((l) => l.level === s.quranLevel) ?? QURAN_LEVELS[0];
-        const { quranLevel: _quranLevel, ...student } = s;
+        const memorized = memorizedHizbs(latest, latestRubs, s.quranLevel);
+        const memorizedSet = new Set(memorized);
+        const thisTermRubs = new Set(ownRubs.filter((a) => a.termId === tid).map((a) => a.rub));
+        const { quranLevel: _quranLevel, quranPath: _quranPath, ...student } = s;
         return {
           student,
           ...results.get(s.id)!,
@@ -78,8 +92,27 @@ router.get(
             level: level.level,
             levelName: level.name,
             levelDescription: level.description,
+            unit: level.unit,
+            target: level.target,
             surahs: level.surahs.map((su) => ({ ...su, level: latest.get(su.number) ?? null })),
-            progress: levelProgress(latest),
+            // Map of the 60 hizbs: latest level of each rob', and whether the hizb is memorised
+            // (57 to 60 through the surahs of levels 1 to 4) or was worked on this term.
+            hizbs: PROGRAMME_HIZBS.map((h) => {
+              const quarters = [1, 2, 3, 4].map((q) => rubNumber(h.number, q));
+              return {
+                number: h.number,
+                from: h.from,
+                to: h.to,
+                quarters: h.bySurahs ? null : quarters.map((r) => latestRubs.get(r) ?? null),
+                memorized: memorizedSet.has(h.number),
+                thisTerm: quarters.some((r) => thisTermRubs.has(r)),
+              };
+            }),
+            hizbsMemorized: memorized.length,
+            hizbsTotal: TOTAL_HIZBS,
+            path: QURAN_PATHS.find((p) => p.code === s.quranPath)?.label ?? null,
+            next: nextRub(s.quranPath, latestRubs, memorized),
+            progress: levelProgress(latest, latestRubs, s.quranLevel),
             summary: summarizeLevels(thisTerm),
           },
           remark: remarks.find((r) => r.studentId === s.id)?.comment ?? '',

@@ -217,7 +217,7 @@ describe('pre-registration files (mosque side)', () => {
     await send(file([child(ctx.ateliers, { firstName: 'Sara', birthDate: '2021-01-01', gender: 'F' })]));
 
     const backup = (await req.get('/api/export').set(auth(ctx.token))).body;
-    expect(backup.version).toBe('5');
+    expect(backup.version).toBe('6');
     expect(backup.preRegistrations).toHaveLength(2);
     expect(backup.guardians).toHaveLength(1);
 

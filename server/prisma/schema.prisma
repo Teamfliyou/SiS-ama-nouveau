@@ -44,7 +44,8 @@ model Student {
   medicalInfo             String?
   photoOptOut             Boolean                @default(false) // the family refuses photos of the child
   canLeaveAlone           Boolean                @default(false) // allowed to go home alone
-  quranLevel              Int                    @default(1) // Quran programme level (1 to 4), see lib/quran.ts
+  quranLevel              Int                    @default(1) // Quran programme level (1 to 11), see lib/quran.ts
+  quranPath               String                 @default("BOTTOM_UP") // learning path for the hizbs (QURAN_PATHS)
   classId                 Int?
   class                   Class?                 @relation(fields: [classId], references: [id])
   guardians               Guardian[]
@@ -52,6 +53,7 @@ model Student {
   attendances             Attendance[]
   grades                  Grade[]
   surahLevels             SurahAssessment[]
+  rubLevels               RubAssessment[]
   reportRemarks           ReportRemark[]
   preRegistrationChildren PreRegistrationChild[]
   createdAt               DateTime               @default(now())
@@ -151,6 +153,7 @@ model Term {
   endDate       String // "YYYY-MM-DD"
   evaluations   Evaluation[]
   surahLevels   SurahAssessment[]
+  rubLevels     RubAssessment[]
   reportRemarks ReportRemark[]
   createdAt     DateTime          @default(now())
 }
@@ -187,7 +190,7 @@ model Grade {
   @@unique([evaluationId, studentId])
 }
 
-// Competency level reached on one surah of the Juz Amma (surahs 78 to 114) for a term.
+// Competency level reached on one surah of levels 1 to 4 (Al-Fatiha, Juz Tabarak, Juz Amma) for a term.
 model SurahAssessment {
   id          Int     @id @default(autoincrement())
   surahNumber Int
@@ -198,6 +201,20 @@ model SurahAssessment {
   term        Term    @relation(fields: [termId], references: [id], onDelete: Restrict)
 
   @@unique([studentId, termId, surahNumber])
+}
+
+// Same as SurahAssessment, rob' by rob' (quarter of hizb, numbered 1 to 224 for hizbs
+// 1 to 56), for the Dar Al Coran levels (5 and above).
+model RubAssessment {
+  id        Int     @id @default(autoincrement())
+  rub       Int
+  level     String // NOT_ACQUIRED, IN_PROGRESS, ACQUIRED, MASTERED
+  studentId Int
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId    Int
+  term      Term    @relation(fields: [termId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, termId, rub])
 }
 
 // General appreciation written on a student's report card for a term.

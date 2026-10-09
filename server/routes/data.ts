@@ -6,7 +6,7 @@ import { asyncHandler } from '../lib/errors';
 import { validate, isRealDateString, timeSchema } from '../lib/validate';
 import { normalizeKey, studentKey } from '../lib/dedupe';
 import { eurosToCents } from '../lib/money';
-import { COMPETENCY_LEVELS, SURAH_NUMBERS } from '../lib/quran';
+import { COMPETENCY_LEVELS, SURAH_NUMBERS, RUB_NUMBERS, MAX_QURAN_LEVEL, QURAN_PATH_CODES } from '../lib/quran';
 
 const router = Router();
 
@@ -110,7 +110,8 @@ const importPayloadSchema = z.object({
         medicalInfo: nullableText(1000),
         photoOptOut: z.boolean().optional(),
         canLeaveAlone: z.boolean().optional(),
-        quranLevel: z.number().int().min(1).max(4).optional(),
+        quranLevel: z.number().int().min(1).max(MAX_QURAN_LEVEL).optional(),
+        quranPath: z.enum(QURAN_PATH_CODES).optional(),
         class: z.object({ name: z.string() }).nullable().optional(),
       })
     )
@@ -271,6 +272,17 @@ const importPayloadSchema = z.object({
     )
     .max(MAX_ITEMS * 4)
     .optional(),
+  rubAssessments: z
+    .array(
+      z.object({
+        studentId: z.number().int(),
+        rub: z.number().int().refine((n) => RUB_NUMBERS.has(n)),
+        level: z.enum(COMPETENCY_LEVELS),
+        term: z.object({ name: z.string() }),
+      })
+    )
+    .max(MAX_ITEMS * 4)
+    .optional(),
   reportRemarks: z
     .array(
       z.object({
@@ -341,6 +353,7 @@ router.get(
       terms,
       evaluations,
       surahAssessments,
+      rubAssessments,
       reportRemarks,
       timetableSlots,
       lessons,
@@ -366,6 +379,7 @@ router.get(
         orderBy: { date: 'asc' },
       }),
       prisma.surahAssessment.findMany({ include: { term: { select: { name: true } } } }),
+      prisma.rubAssessment.findMany({ include: { term: { select: { name: true } } } }),
       prisma.reportRemark.findMany({ include: { term: { select: { name: true } } } }),
       prisma.timetableSlot.findMany({
         include: scheduleRefs,
@@ -388,7 +402,7 @@ router.get(
     );
     res.json({
       exportDate: new Date().toISOString(),
-      version: '5',
+      version: '6',
       classes,
       students,
       teachers,
@@ -399,6 +413,7 @@ router.get(
       terms,
       evaluations,
       surahAssessments,
+      rubAssessments,
       reportRemarks,
       timetableSlots,
       lessons,
@@ -430,6 +445,7 @@ router.post(
       terms = [],
       evaluations = [],
       surahAssessments = [],
+      rubAssessments = [],
       reportRemarks = [],
       timetableSlots = [],
       lessons = [],
@@ -547,6 +563,7 @@ router.post(
               photoOptOut: st.photoOptOut ?? false,
               canLeaveAlone: st.canLeaveAlone ?? false,
               quranLevel: st.quranLevel ?? 1,
+              quranPath: st.quranPath ?? 'BOTTOM_UP',
               classId: resolveClassId(st.class?.name),
             },
           });
@@ -670,7 +687,7 @@ router.post(
           const termId = termMap.get(normalizeKey(item.term.name));
           return sid === undefined || termId === undefined ? [] : [{ item, studentId: sid, termId }];
         });
-      const competenciesCreated = (
+      const surahsCreated = (
         await tx.surahAssessment.createMany({
           data: byStudentAndTerm(surahAssessments).map(({ item, studentId, termId }) => ({
             studentId,
@@ -681,6 +698,18 @@ router.post(
           skipDuplicates: true,
         })
       ).count;
+      const rubsCreated = (
+        await tx.rubAssessment.createMany({
+          data: byStudentAndTerm(rubAssessments).map(({ item, studentId, termId }) => ({
+            studentId,
+            termId,
+            rub: item.rub,
+            level: item.level,
+          })),
+          skipDuplicates: true,
+        })
+      ).count;
+      const competenciesCreated = surahsCreated + rubsCreated;
       await tx.reportRemark.createMany({
         data: byStudentAndTerm(reportRemarks).map(({ item, studentId, termId }) => ({
           studentId,

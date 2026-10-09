@@ -14,14 +14,70 @@ export const LEVELS: { code: CompetencyLevel; label: string; short: string; colo
   { code: 'MASTERED', label: 'Maîtrisé', short: 'M', color: 'bg-blue-600 text-white border-blue-600' },
 ];
 
-export type QuranLevel = { level: number; name: string; description: string; surahs: Surah[] };
+/** Levels 1 to 4 list their surahs; the next ones (unit "hizb") set a number of memorised hizbs to reach. */
+export type QuranLevel = {
+  level: number;
+  name: string;
+  description: string;
+  unit: 'surah' | 'hizb';
+  surahs: Surah[];
+  target: number | null;
+};
+/** A hizb with the first verse of its 4 rob'. Hizbs 57 to 60 are assessed through their surahs. */
+export type Hizb = { number: number; juz: number; from: string; to: string; quarters: string[]; bySurahs: boolean; surahs: number[] };
+export type QuranPath = { code: string; label: string; order: number[] };
+export type QuranProgramme = { programme: QuranLevel[]; hizbs: Hizb[]; paths: QuranPath[] };
+export type LevelProgress = { level: number; memorized: number; total: number; complete: boolean };
 
-/** Memorised surahs per programme level (ACQUIRED or MASTERED), from the latest level per surah. */
-export function levelProgress(programme: QuranLevel[], latest: Record<number, string>) {
-  return programme.map((l) => {
-    const memorized = l.surahs.filter((s) => latest[s.number] === 'ACQUIRED' || latest[s.number] === 'MASTERED').length;
-    return { level: l.level, memorized, total: l.surahs.length, complete: memorized === l.surahs.length };
+const memorized = (level: string | null | undefined) => level === 'ACQUIRED' || level === 'MASTERED';
+
+/** Rob' q (1 to 4) of hizb h is number (h - 1) * 4 + q. */
+export const rubNumber = (hizb: number, quarter: number) => (hizb - 1) * 4 + quarter;
+export const QUARTERS = [1, 2, 3, 4] as const;
+export const QUARTER_LABELS = ['1er rob\'', '2e rob\'', '3e rob\'', '4e rob\''];
+
+/**
+ * Memorised hizbs: all 4 rob' memorised, or for hizbs 57 to 60 all their surahs, or the
+ * student already reached the hizb levels (levels 1 to 4 then validated them).
+ */
+export function memorizedHizbs(
+  { programme, hizbs }: Pick<QuranProgramme, 'programme' | 'hizbs'>,
+  surahs: Record<number, string>,
+  rubs: Record<number, string>,
+  quranLevel: number
+) {
+  const firstHizbLevel = programme.find((l) => l.unit === 'hizb')?.level ?? Infinity;
+  return hizbs
+    .filter((h) =>
+      h.bySurahs
+        ? quranLevel >= firstHizbLevel || h.surahs.every((n) => memorized(surahs[n]))
+        : QUARTERS.every((q) => memorized(rubs[rubNumber(h.number, q)]))
+    )
+    .map((h) => h.number);
+}
+
+/** Progress per level: memorised surahs for levels 1 to 4, memorised hizbs against the target for the next ones. */
+export function levelProgress(
+  ref: Pick<QuranProgramme, 'programme' | 'hizbs'>,
+  surahs: Record<number, string>,
+  rubs: Record<number, string> = {},
+  quranLevel = 1
+): LevelProgress[] {
+  const hizbCount = memorizedHizbs(ref, surahs, rubs, quranLevel).length;
+  return ref.programme.map((l) => {
+    const done = l.target === null ? l.surahs.filter((s) => memorized(surahs[s.number])).length : hizbCount;
+    const total = l.target ?? l.surahs.length;
+    return { level: l.level, memorized: done, total, complete: done >= total };
   });
+}
+
+/** Next rob' suggested by the path: first rob' not memorised of the first hizb not memorised (null for a free path). */
+export function nextRub(path: QuranPath | undefined, rubs: Record<number, string>, memorizedList: number[]) {
+  const done = new Set(memorizedList);
+  const hizb = path?.order.find((h) => !done.has(h));
+  if (hizb === undefined) return null;
+  const quarter = QUARTERS.find((q) => !memorized(rubs[rubNumber(hizb, q)])) ?? 1;
+  return { hizb, quarter };
 }
 
 export const levelInfo = (code: string | null | undefined) => LEVELS.find((l) => l.code === code) ?? null;

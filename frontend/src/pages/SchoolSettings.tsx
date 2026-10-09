@@ -87,7 +87,7 @@ export default function SchoolSettings() {
         <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Matières & périodes</h2>
         <p className="mt-2 text-sm text-slate-500">
           Les matières sont notées et apparaissent sur le bulletin avec leur coefficient. Le Coran n'est pas une
-          matière : il est évalué par compétences, sourate par sourate.
+          matière : il est évalué par compétences, sourate par sourate puis rob' par rob'.
         </p>
       </div>
 
