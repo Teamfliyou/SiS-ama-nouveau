@@ -42,6 +42,7 @@ export const BACKUP_COLLECTIONS = [
   'terms',
   'evaluations',
   'surahAssessments',
+  'rubAssessments',
   'reportRemarks',
   'timetableSlots',
   'lessons',

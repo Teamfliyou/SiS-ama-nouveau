@@ -91,6 +91,8 @@ model Student {
   wasEnrolled2025_2026   Boolean?
   arabicCourse           String?
   quranCourse            String?
+  quranLevel              Int @default(1)
+  quranPath               String @default("BOTTOM_UP")
   classId                Int?
   class       Class?       @relation(fields: [classId], references: [id], onDelete: SetNull)
   familyId    Int?
@@ -100,6 +102,7 @@ model Student {
   enrollments Enrollment[]
   grades        Grade[]
   surahLevels   SurahAssessment[]
+  rubLevels     RubAssessment[]
   reportRemarks ReportRemark[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -243,6 +246,7 @@ model Term {
   endDate       String // "YYYY-MM-DD"
   evaluations   Evaluation[]
   surahLevels   SurahAssessment[]
+  rubLevels     RubAssessment[]
   reportRemarks ReportRemark[]
   createdAt     DateTime          @default(now())
 }
@@ -432,4 +436,17 @@ model PreRegistrationGuardian {
   address           String?
   profession        String?
   volunteer         Boolean         @default(false)
+}
+
+model RubAssessment {
+  id        Int     @id @default(autoincrement())
+  hizb      Int // 1 to 56
+  quarter   Int // 1 to 4
+  level     String // NOT_ACQUIRED, IN_PROGRESS, ACQUIRED, MASTERED
+  studentId Int
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId    Int
+  term      Term    @relation(fields: [termId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, termId, hizb, quarter])
 }

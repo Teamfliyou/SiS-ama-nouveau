@@ -15,7 +15,7 @@ import {
   normalizeBackupInput,
   buildBackupFilename,
 } from '../lib/backup';
-import { COMPETENCY_LEVELS, SURAH_NUMBERS } from '../lib/juzAmma';
+import { COMPETENCY_LEVELS, SURAH_NUMBERS, MAX_QURAN_LEVEL, MAP_HIZBS, QURAN_PATH_CODES } from '../lib/quran';
 
 const router = Router();
 
@@ -187,6 +187,8 @@ const importPayloadSchema = z.object({
         medicalInfo: nullableText(1000),
         photoOptOut: z.boolean().optional(),
         canLeaveAlone: z.boolean().optional(),
+        quranLevel: z.number().int().min(1).max(MAX_QURAN_LEVEL).optional(),
+        quranPath: z.enum(QURAN_PATH_CODES).optional(),
         class: classRefSchema.nullable().optional(),
         family: z
           .object({
@@ -203,6 +205,7 @@ const importPayloadSchema = z.object({
           })
           .nullable()
           .optional(),
+
       })
     )
     .max(MAX_ITEMS)
@@ -385,6 +388,18 @@ const importPayloadSchema = z.object({
     )
     .max(MAX_ITEMS * 4)
     .optional(),
+  rubAssessments: z
+    .array(
+      z.object({
+        studentId: z.number().int(),
+        hizb: z.number().int().min(1).max(MAP_HIZBS),
+        quarter: z.number().int().min(1).max(4),
+        level: z.enum(COMPETENCY_LEVELS),
+        term: z.object({ name: z.string() }),
+      })
+    )
+    .max(MAX_ITEMS * 4 * 4)
+    .optional(),
   reportRemarks: z
     .array(
       z.object({
@@ -527,6 +542,7 @@ router.get(
       terms,
       evaluations,
       surahAssessments,
+      rubAssessments,
       reportRemarks,
       timetableSlots,
       lessons,
@@ -567,7 +583,9 @@ router.get(
           orderBy: { date: 'asc' },
         }),
         prisma.surahAssessment.findMany({ include: { term: { select: { name: true } } } }),
+        prisma.rubAssessment.findMany({ include: { term: { select: { name: true } } } }),
         prisma.reportRemark.findMany({ include: { term: { select: { name: true } } } }),
+
       prisma.timetableSlot.findMany({
         include: scheduleRefs,
         orderBy: [{ classId: 'asc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
@@ -629,6 +647,7 @@ router.get(
       terms,
       evaluations,
       surahAssessments,
+      rubAssessments,
       reportRemarks,
       timetableSlots,
       lessons,
@@ -677,6 +696,7 @@ router.post(
       terms = [],
       evaluations = [],
       surahAssessments = [],
+      rubAssessments = [],
       reportRemarks = [],
       timetableSlots = [],
       lessons = [],
@@ -873,6 +893,8 @@ router.post(
               dateOfBirth: st.dateOfBirth ? ymdToDate(st.dateOfBirth.slice(0, 10)) : st.birthDate ? ymdToDate(st.birthDate) : null,
               birthDate: st.birthDate ?? st.dateOfBirth?.slice(0, 10) ?? null,
               wasEnrolled2025_2026: st.wasEnrolled2025_2026, arabicCourse: st.arabicCourse, quranCourse: st.quranCourse,
+              quranLevel: st.quranLevel ?? 1,
+              quranPath: st.quranPath ?? 'BOTTOM_UP',
               gender: st.gender, medicalInfo: st.medicalInfo, photoOptOut: st.photoOptOut, canLeaveAlone: st.canLeaveAlone },
           });
           studentId = created.id;
@@ -956,6 +978,7 @@ router.post(
       };
 
       // ── Paiements ─────────────────────────────────────────────────────
+
       for (const p of payments) {
         const newStudentId = studentMap.get(p.studentId ?? -1) ?? studentMap.get(p.student?.id ?? -1);
         if (newStudentId === undefined) {
@@ -1115,6 +1138,16 @@ router.post(
           skipDuplicates: true,
         })
       ).count;
+      await tx.rubAssessment.createMany({
+        data: byStudentAndTerm(rubAssessments).map(({ item, studentId, termId }) => ({
+          studentId,
+          termId,
+          hizb: item.hizb,
+          quarter: item.quarter,
+          level: item.level,
+        })),
+        skipDuplicates: true,
+      });
       await tx.reportRemark.createMany({
         data: byStudentAndTerm(reportRemarks).map(({ item, studentId, termId }) => ({
           studentId,

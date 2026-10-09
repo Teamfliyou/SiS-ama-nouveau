@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { BookOpen, CalendarRange, FileText, Printer, Save, User } from 'lucide-react';
 import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
 import { toast } from '../utils/toast';
-import { formatDay, formatScore, levelInfo, LEVELS, type Term, type Surah, type CompetencyLevel } from '../utils/school';
+import { formatDay, formatScore, levelInfo, LEVELS, type Term, type Surah, type CompetencyLevel, type Hizb } from '../utils/school';
 import { useSchoolRefs, currentTermId } from '../components/school/useSchoolRefs';
 import SelectField from '../components/school/SelectField';
 
@@ -26,9 +26,21 @@ type Report = {
   classGeneralAverage: number | null;
   mention: string | null;
   attendance: { present: number; absent: number; late: number };
-  juzAmma: {
+  quran: {
+    level: number;
+    levelName: string;
+    levelDescription: string;
+    kind: 'surahs' | 'hizbs';
+    target: number | null;
     surahs: (Surah & { level: CompetencyLevel | null })[];
-    summary: { assessed: number; memorized: number; total: number; counts: Record<CompetencyLevel, number> };
+    progress: { level: number; memorized: number; total: number; complete: boolean }[];
+    summary: { assessed: number; memorized: number; counts: Record<CompetencyLevel, number> };
+    hizbs: {
+      acquired: number;
+      path: string | null;
+      next: number | null;
+      worked: (Hizb & { quarters: (CompetencyLevel | null)[]; status: CompetencyLevel | null })[];
+    };
   };
   remark: string;
 };
@@ -96,7 +108,7 @@ export default function ReportCards() {
         <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Bulletins</h2>
         <p className="mt-2 text-sm text-slate-500">
           Générez le bulletin d'un élève ou de toute la classe : moyennes par matière, rang, assiduité, compétences du
-          Juz Amma et appréciation générale. Un bulletin par page à l'impression.
+          Coran (niveau de l'élève) et appréciation générale. Un bulletin par page à l'impression.
         </p>
       </div>
 
@@ -192,14 +204,63 @@ export default function ReportCards() {
               </div>
               {r.mention && <p className="mt-2 font-semibold text-emerald-700">Mention : {r.mention}</p>}
 
-              {/* Juz Amma */}
-              {r.juzAmma.summary.assessed > 0 && (
+              {/* Quran: the student's current level */}
+              {r.quran.kind === 'hizbs' ? (
                 <>
                   <h4 className="mt-5 mb-2 font-bold uppercase text-xs tracking-wide text-slate-600">
-                    Compétences — Juz Amma ({r.juzAmma.summary.memorized}/{r.juzAmma.summary.total} sourates acquises)
+                    Coran : {r.quran.levelName}
+                  </h4>
+                  <p>
+                    <b>{r.quran.hizbs.acquired}</b> hizbs acquis sur 60
+                    {r.quran.target !== null && (
+                      <> · objectif du niveau : {r.quran.target}{r.quran.hizbs.acquired >= r.quran.target && ' ✓'}</>
+                    )}
+                    {r.quran.hizbs.path && <span className="text-slate-500"> · parcours : {r.quran.hizbs.path}</span>}
+                  </p>
+                  <div className="mt-1.5 h-2 rounded-full bg-slate-100 border border-slate-200 overflow-hidden print:bg-transparent">
+                    <div className="h-full bg-emerald-500" style={{ width: `${(r.quran.hizbs.acquired / 60) * 100}%` }} />
+                  </div>
+                  {r.quran.hizbs.worked.length > 0 ? (
+                    <>
+                      <p className="mt-2 text-xs text-slate-600">Hizbs travaillés sur la période (4 rob' par hizb) :</p>
+                      <div className="grid grid-cols-2 gap-x-4 mobile:grid-cols-1 text-xs">
+                        {r.quran.hizbs.worked.map((h) => {
+                          const lvl = levelInfo(h.status);
+                          return (
+                            <div key={h.number} className="flex items-center justify-between gap-2 border-b border-slate-200 py-1 print:py-0.5">
+                              <span className="truncate"><b>H{h.number}</b> <span className="text-slate-500">{h.surahName} {h.verse}</span></span>
+                              <span className="flex items-center gap-1 shrink-0">
+                                {h.quarters.map((q, i) => {
+                                  const ql = levelInfo(q);
+                                  return (
+                                    <span key={i} className={`inline-flex items-center justify-center w-6 h-4 rounded border text-[9px] font-bold ${ql ? ql.color : 'border-slate-200 text-slate-300'}`}>
+                                      {ql ? ql.short : '·'}
+                                    </span>
+                                  );
+                                })}
+                                <span className={`ml-1 inline-flex items-center justify-center w-7 h-5 rounded border font-bold ${lvl ? lvl.color : 'border-slate-200 text-slate-300'}`}>
+                                  {lvl ? lvl.short : '·'}
+                                </span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="mt-2 text-xs text-slate-500">Aucun hizb évalué sur cette période.</p>
+                  )}
+                  <p className="mt-1 flex flex-wrap gap-x-4 text-[11px] text-slate-500">
+                    {LEVELS.map((l) => <span key={l.code}><b>{l.short}</b> : {l.label}</span>)}
+                  </p>
+                </>
+              ) : (r.quran.summary.assessed > 0 || r.quran.progress.some((p) => p.level <= 4 && p.memorized > 0)) && (
+                <>
+                  <h4 className="mt-5 mb-2 font-bold uppercase text-xs tracking-wide text-slate-600">
+                    Compétences Coran : {r.quran.levelName} ({r.quran.levelDescription})
                   </h4>
                   <div className="grid grid-cols-3 gap-x-4 mobile:grid-cols-1 text-xs">
-                    {r.juzAmma.surahs.map((su) => {
+                    {r.quran.surahs.map((su) => {
                       const lvl = levelInfo(su.level);
                       return (
                         <div key={su.number} className="flex items-center justify-between border-b border-slate-200 py-1 print:py-0.5">
@@ -211,8 +272,15 @@ export default function ReportCards() {
                       );
                     })}
                   </div>
-                  <p className="mt-2 flex flex-wrap gap-x-4 text-[11px] text-slate-500">
-                    {LEVELS.map((l) => <span key={l.code}><b>{l.short}</b> : {l.label} ({r.juzAmma.summary.counts[l.code]})</span>)}
+                  <p className="mt-2 flex flex-wrap gap-x-4 text-xs text-slate-700">
+                    {r.quran.progress.filter((p) => p.level <= 4).map((p) => (
+                      <span key={p.level} className={p.level === r.quran.level ? 'font-bold' : ''}>
+                        Niveau {p.level} : {p.complete ? 'validé ✓' : `${p.memorized}/${p.total}`}
+                      </span>
+                    ))}
+                  </p>
+                  <p className="mt-1 flex flex-wrap gap-x-4 text-[11px] text-slate-500">
+                    {LEVELS.map((l) => <span key={l.code}><b>{l.short}</b> : {l.label}</span>)}
                   </p>
                 </>
               )}
