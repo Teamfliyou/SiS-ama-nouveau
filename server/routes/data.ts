@@ -286,6 +286,17 @@ const importPayloadSchema = z.object({
     )
     .max(MAX_ITEMS * 4 * 4)
     .optional(),
+  announcements: z
+    .array(
+      z.object({
+        title: z.string().trim().min(1).max(150),
+        body: z.string().trim().min(1).max(5000),
+        pinned: z.boolean().default(false),
+        createdAt: z.string().optional(),
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
   reportRemarks: z
     .array(
       z.object({
@@ -363,6 +374,7 @@ router.get(
       guardians,
       preRegistrations,
       registrationSettings,
+      announcements,
     ] = await Promise.all([
       prisma.class.findMany({ orderBy: { name: 'asc' } }),
       prisma.student.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } }),
@@ -398,6 +410,10 @@ router.get(
         orderBy: { id: 'asc' },
       }),
       prisma.registrationSettings.findUnique({ where: { id: 1 } }),
+      prisma.announcement.findMany({
+        select: { title: true, body: true, pinned: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      }),
     ]);
     res.setHeader(
       'Content-Disposition',
@@ -423,6 +439,8 @@ router.get(
       guardians,
       preRegistrations,
       registrationSettings,
+      // Document files are not in this JSON backup: they stay in the database.
+      announcements,
     });
   })
 );
@@ -455,6 +473,7 @@ router.post(
       guardians = [],
       preRegistrations = [],
       registrationSettings = null,
+      announcements = [],
     } = payload;
 
     const counts = await prisma.$transaction(async (tx) => {
@@ -711,6 +730,13 @@ router.post(
         })),
         skipDuplicates: true,
       });
+      // Information already present (same title and text) is kept as is.
+      for (const a of announcements) {
+        if (await tx.announcement.findFirst({ where: { title: a.title, body: a.body }, select: { id: true } })) continue;
+        await tx.announcement.create({
+          data: { title: a.title, body: a.body, pinned: a.pinned, ...(a.createdAt ? { createdAt: new Date(a.createdAt) } : {}) },
+        });
+      }
       await tx.reportRemark.createMany({
         data: byStudentAndTerm(reportRemarks).map(({ item, studentId, termId }) => ({
           studentId,

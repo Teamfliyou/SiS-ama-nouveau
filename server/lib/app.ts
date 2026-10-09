@@ -24,6 +24,8 @@ import timetableRoutes from '../routes/timetable';
 import lessonRoutes from '../routes/lessons';
 import publicRegistrationRoutes from '../routes/publicRegistration';
 import preRegistrationRoutes from '../routes/preRegistrations';
+import announcementRoutes from '../routes/announcements';
+import documentRoutes from '../routes/documents';
 import { getJwtSecret } from './secret';
 
 /** Fails fast on a missing/weak JWT secret. Never rely on a default value. */
@@ -85,6 +87,8 @@ export function createApp(): Express {
   app.use('/api/timetable', timetableRoutes);
   app.use('/api/lessons', lessonRoutes);
   app.use('/api/pre-registrations', preRegistrationRoutes);
+  app.use('/api/announcements', announcementRoutes);
+  app.use('/api/documents', documentRoutes);
   app.use('/api/import-csv', importCsvRoutes);
   app.use('/api', dataRoutes); // /api/export, /api/import/full
   app.use('/api/stats', statsRoutes);

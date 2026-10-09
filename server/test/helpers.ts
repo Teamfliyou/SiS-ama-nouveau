@@ -64,6 +64,8 @@ export async function morningCourseEveryDay(token: string, classId: number) {
 
 /** Empties all tables (FK-safe order). Called before each test. */
 export async function resetDb() {
+  await prisma.announcement.deleteMany();
+  await prisma.document.deleteMany();
   await prisma.preRegistration.deleteMany();
   await prisma.guardian.deleteMany();
   await prisma.registrationSettings.deleteMany();
