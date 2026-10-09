@@ -1,7 +1,14 @@
 import { z } from 'zod';
 import type { NextFunction, Request, Response } from 'express';
 import { AppError } from './errors';
-import { COMPETENCY_LEVELS, PROGRAMME_SURAHS, SURAH_NUMBERS, MAX_QURAN_LEVEL } from './quran';
+import {
+  COMPETENCY_LEVELS,
+  PROGRAMME_SURAHS,
+  SURAH_NUMBERS,
+  MAX_QURAN_LEVEL,
+  MAP_HIZBS,
+  QURAN_PATH_CODES,
+} from './quran';
 
 // ─── Common primitives ────────────────────────────────────────────────
 
@@ -276,6 +283,26 @@ export const competenciesSaveSchema = z.object({
 export const quranLevelSchema = z.object({
   studentId: z.number().int().positive('Élève invalide'),
   level: z.number().int().min(1, 'Niveau invalide').max(MAX_QURAN_LEVEL, 'Niveau invalide'),
+});
+
+export const rubsSaveSchema = z.object({
+  studentId: z.number().int().positive('Élève invalide'),
+  termId: z.number().int().positive('Période invalide'),
+  rubs: z
+    .array(
+      z.object({
+        hizb: z.number().int().min(1, 'Hizb invalide').max(MAP_HIZBS, 'Hizb hors de la carte (1 à 56)'),
+        quarter: z.number().int().min(1, 'Rob invalide').max(4, 'Rob invalide'),
+        // null clears the assessment of that rob'.
+        level: competencyLevelSchema.nullable(),
+      })
+    )
+    .max(MAP_HIZBS * 4, 'Trop de rob'),
+});
+
+export const quranPathSchema = z.object({
+  studentId: z.number().int().positive('Élève invalide'),
+  path: z.enum(QURAN_PATH_CODES, { message: 'Parcours invalide' }),
 });
 
 export const reportRemarkSchema = z.object({

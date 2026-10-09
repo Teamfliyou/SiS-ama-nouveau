@@ -58,6 +58,7 @@ export async function resetDb() {
   await prisma.grade.deleteMany();
   await prisma.evaluation.deleteMany();
   await prisma.surahAssessment.deleteMany();
+  await prisma.rubAssessment.deleteMany();
   await prisma.reportRemark.deleteMany();
   await prisma.subject.deleteMany();
   await prisma.term.deleteMany();

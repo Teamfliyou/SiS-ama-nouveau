@@ -4,7 +4,17 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, reportRemarkSchema, parseId } from '../lib/validate';
 import { computeClassResults } from '../lib/reportCard';
-import { QURAN_LEVELS, levelProgress, summarizeLevels } from '../lib/quran';
+import {
+  QURAN_LEVELS,
+  QURAN_PATHS,
+  HIZBS,
+  levelProgress,
+  summarizeLevels,
+  rubKey,
+  hizbStatuses,
+  acquiredHizbs,
+  nextHizb,
+} from '../lib/quran';
 
 const router = Router();
 
@@ -12,7 +22,8 @@ router.use(authenticate);
 
 // GET /api/report-cards?classId=&termId=&studentId=
 // Report cards of a class for a term (or of one of its students): subject averages,
-// class statistics, rank, Quran competencies (student's level), attendance over the term and remark.
+// class statistics, rank, Quran competencies (student's level, hizb map for Dar Al Coran),
+// attendance over the term and remark.
 router.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -31,7 +42,7 @@ router.get(
 
     const students = await prisma.student.findMany({
       where: { classId: cid },
-      select: { id: true, firstName: true, lastName: true, quranLevel: true },
+      select: { id: true, firstName: true, lastName: true, quranLevel: true, quranPath: true },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
     if (sid !== null && !students.some((s) => s.id === sid)) {
@@ -40,7 +51,7 @@ router.get(
     const ids = students.map((s) => s.id);
     const wanted = sid === null ? ids : [sid];
 
-    const [subjects, evaluations, attendance, surahLevels, remarks, teachers] = await Promise.all([
+    const [subjects, evaluations, attendance, surahLevels, rubLevels, remarks, teachers] = await Promise.all([
       prisma.subject.findMany(),
       prisma.evaluation.findMany({ where: { classId: cid, termId: tid }, include: { grades: true } }),
       prisma.attendance.groupBy({
@@ -52,6 +63,11 @@ router.get(
       prisma.surahAssessment.findMany({
         where: { studentId: { in: wanted }, term: { startDate: { lte: term.startDate } } },
         include: { term: { select: { startDate: true } } },
+        orderBy: { term: { startDate: 'asc' } },
+      }),
+      // Same for the rob' of the hizb map (Dar Al Coran).
+      prisma.rubAssessment.findMany({
+        where: { studentId: { in: wanted }, term: { startDate: { lte: term.startDate } } },
         orderBy: { term: { startDate: 'asc' } },
       }),
       prisma.reportRemark.findMany({ where: { studentId: { in: wanted }, termId: tid } }),
@@ -68,8 +84,11 @@ router.get(
         const own = surahLevels.filter((a) => a.studentId === s.id);
         const latest = new Map(own.map((a) => [a.surahNumber, a.level] as const));
         const thisTerm = own.filter((a) => a.termId === tid).map((a) => a.level);
+        const ownRubs = rubLevels.filter((a) => a.studentId === s.id);
+        const latestRubs = new Map(ownRubs.map((a) => [rubKey(a.hizb, a.quarter), a.level] as const));
+        const workedThisTerm = new Set(ownRubs.filter((a) => a.termId === tid).map((a) => a.hizb));
         const level = QURAN_LEVELS.find((l) => l.level === s.quranLevel) ?? QURAN_LEVELS[0];
-        const { quranLevel: _quranLevel, ...student } = s;
+        const { quranLevel: _quranLevel, quranPath, ...student } = s;
         return {
           student,
           ...results.get(s.id)!,
@@ -79,8 +98,19 @@ router.get(
             levelName: level.name,
             levelDescription: level.description,
             surahs: level.surahs.map((su) => ({ ...su, level: latest.get(su.number) ?? null })),
-            progress: levelProgress(latest),
+            kind: level.kind,
+            target: level.target,
+            progress: levelProgress(latest, latestRubs),
             summary: summarizeLevels(thisTerm),
+            // Dar Al Coran: hizbs acquired out of 60, path, and the hizbs worked on during the term.
+            hizbs: {
+              acquired: acquiredHizbs(latestRubs),
+              path: QURAN_PATHS.find((p) => p.code === quranPath)?.label ?? null,
+              next: nextHizb(quranPath, latestRubs),
+              worked: hizbStatuses(latestRubs)
+                .filter((h) => workedThisTerm.has(h.hizb))
+                .map((h) => ({ ...HIZBS[h.hizb - 1], quarters: h.quarters, status: h.status })),
+            },
           },
           remark: remarks.find((r) => r.studentId === s.id)?.comment ?? '',
         };

@@ -176,11 +176,14 @@ describe('subjects, terms, evaluations and grades', () => {
 describe('Quran competencies', () => {
   beforeEach(resetDb);
 
-  it('splits the programme in 4 levels and rejects surahs outside it', async () => {
+  it('splits the programme in 11 levels and rejects surahs outside it', async () => {
     const ctx = await setup();
     const ref = await req.get('/api/competencies/programme').set(auth(ctx.token));
-    const levels = ref.body.programme as { level: number; surahs: { number: number }[] }[];
-    expect(levels.map((l) => l.surahs.length)).toEqual([17, 12, 9, 11]);
+    const levels = ref.body.programme as { level: number; surahs: { number: number }[]; target: number | null }[];
+    expect(levels.map((l) => l.surahs.length)).toEqual([17, 12, 9, 11, 0, 0, 0, 0, 0, 0, 0]);
+    expect(levels.map((l) => l.target)).toEqual([null, null, null, null, 8, 14, 20, 28, 38, 48, 60]);
+    expect(ref.body.hizbs).toHaveLength(56);
+    expect(ref.body.hizbs[43]).toMatchObject({ number: 44, juz: 22, surahName: 'Saba' });
     expect(levels[0].surahs.map((s) => s.number)).toEqual([1, ...Array.from({ length: 16 }, (_, i) => 114 - i)]);
     expect(levels[1].surahs.map((s) => s.number).sort((a, b) => a - b)[0]).toBe(87);
     expect(levels[2].surahs.map((s) => s.number)).toContain(78);
@@ -252,7 +255,7 @@ describe('Quran levels', () => {
 
     const moved = await req.put('/api/competencies/level').set(auth(ctx.token)).send({ studentId: sid, level: 2 });
     expect(moved.status).toBe(200);
-    expect((await req.put('/api/competencies/level').set(auth(ctx.token)).send({ studentId: sid, level: 5 })).status).toBe(400);
+    expect((await req.put('/api/competencies/level').set(auth(ctx.token)).send({ studentId: sid, level: 12 })).status).toBe(400);
 
     view = (await req.get(`/api/competencies?classId=${ctx.classId}&termId=${t2.id}`).set(auth(ctx.token))).body;
     s = view.students.find((x: { id: number }) => x.id === sid);
@@ -266,6 +269,100 @@ describe('Quran levels', () => {
     expect(report.quran).toMatchObject({ level: 2, levelName: 'Niveau 2' });
     expect(report.quran.surahs).toHaveLength(12);
     expect(report.quran.progress[0].complete).toBe(true);
+  });
+});
+
+describe('Dar Al Coran (hizb map)', () => {
+  beforeEach(resetDb);
+
+  const wholeHizb = (hizb: number, level = 'ACQUIRED') => [1, 2, 3, 4].map((quarter) => ({ hizb, quarter, level }));
+
+  it('validates a hizb once its 4 rob are acquired, in any order, and follows the path', async () => {
+    const ctx = await setup();
+    const sid = ctx.students[0].id;
+    expect((await req.put('/api/competencies/level').set(auth(ctx.token)).send({ studentId: sid, level: 5 })).status).toBe(200);
+
+    // Hizbs 56 and 55 acquired, hizb 30 (Al-Kahf) acquired out of path order, hizb 54 half done.
+    const saved = await req
+      .put('/api/competencies/rubs')
+      .set(auth(ctx.token))
+      .send({
+        studentId: sid,
+        termId: ctx.termId,
+        rubs: [
+          ...wholeHizb(56, 'MASTERED'),
+          ...wholeHizb(55),
+          ...wholeHizb(30),
+          { hizb: 54, quarter: 1, level: 'ACQUIRED' },
+          { hizb: 54, quarter: 2, level: 'IN_PROGRESS' },
+        ],
+      });
+    expect(saved.status).toBe(200);
+
+    let view = (await req.get(`/api/competencies?classId=${ctx.classId}&termId=${ctx.termId}`).set(auth(ctx.token))).body;
+    let s = view.students.find((x: { id: number }) => x.id === sid);
+    expect(s.quranPath).toBe('BOTTOM_UP');
+    expect(s.rubs['54-2']).toBe('IN_PROGRESS');
+    // 4 (hizbs 57-60) + 56, 55 and 30.
+    expect(s.progress[4]).toEqual({ level: 5, memorized: 7, total: 8, complete: false });
+    expect(s.nextHizb).toBe(54);
+
+    // One more hizb completes Dar Al Coran 2.
+    await req
+      .put('/api/competencies/rubs')
+      .set(auth(ctx.token))
+      .send({ studentId: sid, termId: ctx.termId, rubs: wholeHizb(54) });
+    expect((await req.put('/api/competencies/path').set(auth(ctx.token)).send({ studentId: sid, path: 'FROM_YASIN' })).status).toBe(200);
+    expect((await req.put('/api/competencies/path').set(auth(ctx.token)).send({ studentId: sid, path: 'NOPE' })).status).toBe(400);
+
+    view = (await req.get(`/api/competencies?classId=${ctx.classId}&termId=${ctx.termId}`).set(auth(ctx.token))).body;
+    s = view.students.find((x: { id: number }) => x.id === sid);
+    expect(s.progress[4]).toMatchObject({ memorized: 8, complete: true });
+    expect(s.nextHizb).toBe(44);
+
+    const report = (
+      await req.get(`/api/report-cards?classId=${ctx.classId}&termId=${ctx.termId}&studentId=${sid}`).set(auth(ctx.token))
+    ).body.reports[0];
+    expect(report.quran).toMatchObject({ level: 5, kind: 'hizbs', target: 8, levelName: 'Niveau 5 · Dar Al Coran 2' });
+    expect(report.quran.hizbs).toMatchObject({ acquired: 8, next: 44, path: 'De Ya-Sin vers la fin' });
+    expect(report.quran.hizbs.worked.map((h: { number: number; status: string }) => [h.number, h.status])).toEqual([
+      [30, 'ACQUIRED'],
+      [54, 'ACQUIRED'],
+      [55, 'ACQUIRED'],
+      [56, 'MASTERED'],
+    ]);
+  });
+
+  it('rejects rob outside the map and keeps rob in the backup', async () => {
+    const ctx = await setup();
+    const sid = ctx.students[0].id;
+    const bad = await req
+      .put('/api/competencies/rubs')
+      .set(auth(ctx.token))
+      .send({ studentId: sid, termId: ctx.termId, rubs: [{ hizb: 57, quarter: 1, level: 'ACQUIRED' }] });
+    expect(bad.status).toBe(400);
+
+    await req
+      .put('/api/competencies/rubs')
+      .set(auth(ctx.token))
+      .send({ studentId: sid, termId: ctx.termId, rubs: wholeHizb(12) });
+    await req.put('/api/competencies/level').set(auth(ctx.token)).send({ studentId: sid, level: 7 });
+    await req.put('/api/competencies/path').set(auth(ctx.token)).send({ studentId: sid, path: 'TOP_DOWN' });
+
+    // A term holding rob cannot be deleted.
+    expect((await req.delete(`/api/terms/${ctx.termId}`).set(auth(ctx.token))).status).toBe(409);
+
+    const backup = (await req.get('/api/export').set(auth(ctx.token))).body;
+    expect(backup.rubAssessments).toHaveLength(4);
+    await resetDb();
+    const token = await adminToken();
+    expect((await req.post('/api/import/full').set(auth(token)).send(backup)).status).toBe(200);
+    const classId = (await req.get('/api/classes').set(auth(token))).body[0].id;
+    const termId = (await req.get('/api/terms').set(auth(token))).body[0].id;
+    const view = (await req.get(`/api/competencies?classId=${classId}&termId=${termId}`).set(auth(token))).body;
+    const amine = view.students.find((x: { firstName: string }) => x.firstName === 'Amine');
+    expect(amine).toMatchObject({ quranLevel: 7, quranPath: 'TOP_DOWN' });
+    expect(amine.progress[6]).toMatchObject({ memorized: 5, total: 20 });
   });
 });
 

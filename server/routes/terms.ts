@@ -47,11 +47,11 @@ router.delete(
     const id = parseId(req.params.id, 'Identifiant de période invalide');
     const existing = await prisma.term.findUnique({
       where: { id },
-      include: { _count: { select: { evaluations: true, surahLevels: true, reportRemarks: true } } },
+      include: { _count: { select: { evaluations: true, surahLevels: true, rubLevels: true, reportRemarks: true } } },
     });
     if (!existing) throw new AppError(404, 'Période introuvable');
-    const { evaluations, surahLevels, reportRemarks } = existing._count;
-    if (evaluations + surahLevels + reportRemarks > 0) {
+    const { evaluations, surahLevels, rubLevels, reportRemarks } = existing._count;
+    if (evaluations + surahLevels + rubLevels + reportRemarks > 0) {
       throw new AppError(409, 'Cette période contient des notes ou des compétences : elle ne peut pas être supprimée');
     }
     await prisma.term.delete({ where: { id } });
