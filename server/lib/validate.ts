@@ -450,6 +450,23 @@ export const preRegistrationValidateSchema = z.object({
     .min(1, 'Aucun enfant à inscrire'),
 });
 
+// ─── Messagerie and documents ────────────────────────────────────────
+
+export const announcementSchema = z.object({
+  title: nameField('Le titre', 150),
+  body: nameField('Le message', 5000),
+  pinned: z.boolean().default(false),
+});
+
+export const DOCUMENT_CATEGORIES = ['REGLEMENT', 'INFORMATION', 'AUTRE'] as const;
+
+/** Title, category and description of a document (the file itself is sent separately). */
+export const documentInfoSchema = z.object({
+  title: nameField('Le titre', 150),
+  category: z.enum(DOCUMENT_CATEGORIES, { message: 'Catégorie invalide' }).default('INFORMATION'),
+  description: optionalTextField('La description', 500),
+});
+
 // ─── Middleware ───────────────────────────────────────────────────────
 
 /** Validates req.body against a zod schema; on failure returns 400 with the first issue. */

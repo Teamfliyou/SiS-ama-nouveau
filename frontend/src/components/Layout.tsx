@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu,
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
   ChevronDown, User, KeyRound, X, Eye, EyeOff,
-  NotebookPen, Sparkles, FileText, BookMarked, CalendarDays, NotebookText, UserPlus
+  NotebookPen, Sparkles, FileText, BookMarked, CalendarDays, NotebookText, UserPlus, Megaphone, FolderOpen
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../utils/api';
@@ -60,6 +60,8 @@ export default function Layout() {
     { name: 'Notes',           href: '/grades',       icon: NotebookPen },
     { name: 'Coran',           href: '/competencies', icon: Sparkles },
     { name: 'Bulletins',       href: '/report-cards', icon: FileText },
+    { name: 'Messagerie',      href: '/messagerie',   icon: Megaphone },
+    { name: 'Documents',       href: '/documents',    icon: FolderOpen },
     { name: 'Matières & périodes', href: '/school-settings', icon: BookMarked },
     { name: 'Import CSV',      href: '/import-csv',   icon: UploadCloud },
     ...(isAdmin ? [{ name: 'Utilisateurs', href: '/users', icon: ShieldCheck }] : []),

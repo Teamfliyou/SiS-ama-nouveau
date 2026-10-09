@@ -11,8 +11,43 @@ model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   password  String
-  role      String   @default("STAFF")
-  createdAt DateTime @default(now())
+  role          String         @default("STAFF")
+  announcements Announcement[]
+  documents     Document[]
+  createdAt     DateTime       @default(now())
+}
+
+// ─── Messagerie et documents ─────────────────────────────────────────
+// Published by administrators; read by the whole team for now, by the
+// families later (family space).
+
+// Information posted by the administration (Messagerie).
+model Announcement {
+  id          Int      @id @default(autoincrement())
+  title       String
+  body        String
+  pinned      Boolean  @default(false) // shown first
+  createdById Int?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Important document (règlement intérieur, informations...). The file is
+// stored in the database so it survives redeployments and database backups.
+model Document {
+  id           Int      @id @default(autoincrement())
+  title        String
+  description  String?
+  category     String   @default("INFORMATION") // REGLEMENT, INFORMATION, AUTRE
+  fileName     String
+  mimeType     String
+  size         Int // bytes
+  data         Bytes
+  uploadedById Int?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Class {
