@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu,
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
@@ -10,7 +10,8 @@ import { authFetch } from '../utils/api';
 import ToastContainer from './ToastContainer';
 import Sheet from './mobile/Sheet';
 import { MobileHeader, MobileTabBar, MoreSheet } from './mobile/MobileNav';
-import { TAB_ITEMS } from './mobile/nav';
+import { tabItemsFor } from './mobile/nav';
+import { canOpen, currentRole, homePath, roleInfo } from '../utils/roles';
 
 export default function Layout() {
   const location = useLocation();
@@ -31,9 +32,10 @@ export default function Layout() {
   const [pwdSuccess, setPwdSuccess] = useState(false);
 
   const userEmail = localStorage.getItem('user') || 'Administrateur';
-  const userRole = localStorage.getItem('role') || '';
+  const userRole = currentRole();
   const userInitials = userEmail.slice(0, 2).toUpperCase();
   const isAdmin = userRole === 'ADMIN';
+  const role = roleInfo(userRole);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -65,10 +67,11 @@ export default function Layout() {
     { name: 'Matières & périodes', href: '/school-settings', icon: BookMarked },
     { name: 'Import CSV',      href: '/import-csv',   icon: UploadCloud },
     ...(isAdmin ? [{ name: 'Utilisateurs', href: '/users', icon: ShieldCheck }] : []),
-  ];
+  ].filter((item) => canOpen(userRole, item.href)); // a Prof only gets the work in class
 
   // Mobile : les sections hors barre du bas vont dans le menu « Plus ».
-  const tabHrefs = TAB_ITEMS.map(t => t.href);
+  const tabItems = tabItemsFor(userRole);
+  const tabHrefs = tabItems.map(t => t.href);
   const secondaryNav = navigation.filter(item => !tabHrefs.includes(item.href));
   const currentNav = navigation.find(item => item.href === location.pathname);
   const pageTitle = currentNav ? currentNav.name : 'SIS';
@@ -98,6 +101,9 @@ export default function Layout() {
     } finally { setPwdLoading(false); }
   };
 
+  // A Prof account opening another section (old link, typed address) goes to the roll call.
+  if (!canOpen(userRole, location.pathname)) return <Navigate to={homePath(userRole)} replace />;
+
   return (
     <div className="min-h-screen bg-slate-50 flex mobile:bg-transparent">
       {/* Fond mobile (profondeur pour le verre) */}
@@ -105,7 +111,7 @@ export default function Layout() {
 
       {/* Navigation mobile : header compact + barre du bas + menu « Plus » */}
       <MobileHeader title={pageTitle} initials={userInitials} onAccount={() => setMoreOpen(true)} />
-      <MobileTabBar pathname={location.pathname} moreActive={!!currentNav && !tabHrefs.includes(currentNav.href)} onMore={() => setMoreOpen(true)} />
+      <MobileTabBar items={tabItems} pathname={location.pathname} moreActive={!!currentNav && !tabHrefs.includes(currentNav.href)} onMore={() => setMoreOpen(true)} />
       <MoreSheet
         open={isMoreOpen}
         onClose={() => setMoreOpen(false)}
@@ -113,7 +119,7 @@ export default function Layout() {
         pathname={location.pathname}
         email={userEmail}
         initials={userInitials}
-        isAdmin={isAdmin}
+        roleLabel={role.label}
         onPassword={openPasswordModal}
         onLogout={handleLogout}
       />
@@ -183,7 +189,7 @@ export default function Layout() {
                 </div>
                 <div className="hidden md:block text-left">
                   <p className="text-sm font-semibold text-slate-700 leading-tight">{userEmail}</p>
-                  <p className="text-xs text-slate-400">{isAdmin ? 'Administrateur' : 'Staff'}</p>
+                  <p className="text-xs text-slate-400">{role.label}</p>
                 </div>
                 <ChevronDown className={`w-4 h-4 text-slate-400 hidden md:block transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -199,8 +205,8 @@ export default function Layout() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-slate-800 truncate">{userEmail}</p>
-                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${isAdmin ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-600'}`}>
-                          {isAdmin ? 'Admin' : 'Staff'}
+                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 border ${role.badge}`}>
+                          {role.label}
                         </span>
                       </div>
                     </div>

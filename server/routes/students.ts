@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireStaff } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, studentCreateSchema, parseId } from '../lib/validate';
 import { centsToEuros } from '../lib/money';
 import { studentBalance } from '../lib/billing';
+import { classIdFilter, isTeacher } from '../lib/access';
 
 const router = Router();
 
@@ -100,9 +101,31 @@ const mapStudent = (s: StudentRow) => {
 };
 
 // GET /api/students
+// A teacher only gets the students of their classes, without any payment data and
+// with the guardians' names and phone numbers only (to reach a family if needed).
 router.get(
   '/',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    if (isTeacher(req)) {
+      const students = await prisma.student.findMany({
+        where: { classId: await classIdFilter(req) },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          birthDate: true,
+          gender: true,
+          medicalInfo: true,
+          photoOptOut: true,
+          canLeaveAlone: true,
+          classId: true,
+          class: { select: { id: true, name: true } },
+          guardians: { select: { id: true, relationship: true, firstName: true, lastName: true, phone: true }, orderBy: { id: 'asc' } },
+        },
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+      });
+      return void res.json(students);
+    }
     const students = await prisma.student.findMany({
       include: { class: true, payments: true, guardians: { orderBy: { id: 'asc' } } },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
@@ -114,6 +137,7 @@ router.get(
 // POST /api/students
 router.post(
   '/',
+  requireStaff,
   validate(studentCreateSchema),
   asyncHandler(async (req, res) => {
     const { firstName, lastName, phone, classId } = req.body as {
@@ -133,6 +157,7 @@ router.post(
 // PUT /api/students/:id
 router.put(
   '/:id',
+  requireStaff,
   validate(studentCreateSchema),
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant d\'élève invalide');
@@ -158,6 +183,7 @@ router.put(
 // removed (cascade), since they cannot meaningfully exist without the student.
 router.delete(
   '/:id',
+  requireStaff,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant d\'élève invalide');
     const existing = await prisma.student.findUnique({ where: { id } });

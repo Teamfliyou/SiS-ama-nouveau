@@ -11,7 +11,10 @@ model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   password  String
-  role          String         @default("STAFF")
+  role          String         @default("STAFF") // ADMIN, STAFF (vie scolaire), TEACHER (prof)
+  // Teacher record of a TEACHER account: gives access to the classes they teach.
+  teacherId     Int?           @unique
+  teacher       Teacher?       @relation(fields: [teacherId], references: [id], onDelete: SetNull)
   announcements Announcement[]
   documents     Document[]
   createdAt     DateTime       @default(now())
@@ -150,6 +153,7 @@ model Teacher {
   class          Class?          @relation(fields: [classId], references: [id])
   timetableSlots TimetableSlot[]
   lessons        Lesson[]
+  user           User? // the teacher's account, if any
   createdAt      DateTime        @default(now())
 }
 

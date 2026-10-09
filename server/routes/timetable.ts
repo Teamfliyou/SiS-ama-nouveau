@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireStaff } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, timetableSlotSchema, parseId } from '../lib/validate';
 import { activityName, dayName, overlaps } from '../lib/schedule';
+import { assertClassAccess, isTeacher } from '../lib/access';
 
 const router = Router();
 
@@ -62,10 +63,17 @@ router.get(
   asyncHandler(async (req, res) => {
     const { classId, teacherId } = req.query as Record<string, string | undefined>;
     if (!classId && !teacherId) throw new AppError(400, 'classId ou teacherId requis');
+    const cid = classId ? parseId(classId, 'Identifiant de classe invalide') : null;
+    const tid = teacherId ? parseId(teacherId, 'Identifiant de professeur invalide') : null;
+    // A teacher sees the timetable of their classes and their own.
+    if (cid !== null) await assertClassAccess(req, cid);
+    if (tid !== null && isTeacher(req) && tid !== req.user?.teacherId) {
+      throw new AppError(403, "Vous n'avez accès qu'à votre emploi du temps");
+    }
     const slots = await prisma.timetableSlot.findMany({
       where: {
-        ...(classId ? { classId: parseId(classId, 'Identifiant de classe invalide') } : {}),
-        ...(teacherId ? { teacherId: parseId(teacherId, 'Identifiant de professeur invalide') } : {}),
+        ...(cid !== null ? { classId: cid } : {}),
+        ...(tid !== null ? { teacherId: tid } : {}),
       },
       include: slotInclude,
       orderBy: slotOrder,
@@ -77,6 +85,7 @@ router.get(
 // POST /api/timetable
 router.post(
   '/',
+  requireStaff,
   validate(timetableSlotSchema),
   asyncHandler(async (req, res) => {
     const data = req.body as SlotBody;
@@ -89,6 +98,7 @@ router.post(
 // PUT /api/timetable/:id — sessions already logged keep their own copy of the course.
 router.put(
   '/:id',
+  requireStaff,
   validate(timetableSlotSchema),
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de créneau invalide');
@@ -104,6 +114,7 @@ router.put(
 // DELETE /api/timetable/:id — the sessions already logged for it are kept (slotId -> null).
 router.delete(
   '/:id',
+  requireStaff,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de créneau invalide');
     const existing = await prisma.timetableSlot.findUnique({ where: { id } });

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireStaff } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, termSchema, parseId } from '../lib/validate';
 
@@ -20,6 +20,7 @@ router.get(
 // POST /api/terms
 router.post(
   '/',
+  requireStaff,
   validate(termSchema),
   asyncHandler(async (req, res) => {
     const { name, startDate, endDate } = req.body as { name: string; startDate: string; endDate: string };
@@ -31,6 +32,7 @@ router.post(
 // PUT /api/terms/:id
 router.put(
   '/:id',
+  requireStaff,
   validate(termSchema),
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de période invalide');
@@ -43,6 +45,7 @@ router.put(
 // DELETE /api/terms/:id — refused while the term holds marks, competencies or remarks.
 router.delete(
   '/:id',
+  requireStaff,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de période invalide');
     const existing = await prisma.term.findUnique({

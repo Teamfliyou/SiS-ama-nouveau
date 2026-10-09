@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, expect } from 'vitest';
-import { req, resetDb, adminToken, auth, createUser, uniqueEmail, tokenFor } from './helpers';
+import { req, resetDb, adminToken, auth, createUser, uniqueEmail, tokenFor, TEST_PASSWORD } from './helpers';
 import { halfDayOf, halfDaysOn, canTakeRollCall, schoolToday } from '../lib/attendance';
 import { isoDayOfWeek } from '../lib/schedule';
 
@@ -61,7 +61,18 @@ describe('roll call per half-day', () => {
       const res = await req.post('/api/timetable').set(auth(admin)).send({ classId: cls.id, dayOfWeek, startTime, endTime, label });
       expect(res.status).toBe(201);
     }
-    return { admin, staff, classId: cls.id as number, students: students as { id: number }[], today };
+    // The teacher in charge of the class, with a Prof account.
+    const teacher = (
+      await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Karim', lastName: 'H', email: uniqueEmail('karim'), classId: cls.id })
+    ).body;
+    const profEmail = uniqueEmail('prof');
+    const account = await req
+      .post('/api/users')
+      .set(auth(admin))
+      .send({ email: profEmail, password: TEST_PASSWORD, role: 'TEACHER', teacherId: teacher.id });
+    expect(account.status).toBe(201);
+    const prof = await tokenFor(profEmail);
+    return { admin, staff, prof, classId: cls.id as number, students: students as { id: number }[], today };
   }
 
   it('takes one roll call per half-day of the timetable, on the day itself', async () => {
@@ -93,24 +104,27 @@ describe('roll call per half-day', () => {
     ]);
   });
 
-  it('refuses past days to staff, future days to everyone and half-days without courses', async () => {
+  it('refuses past days to teachers, future days to everyone and half-days without courses', async () => {
     const ctx = await setup();
     const lastWeek = addDays(ctx.today, -7);
     const nextWeek = addDays(ctx.today, 7);
     const call = (token: string, date: string, period: string) =>
       req.post('/api/attendance').set(auth(token)).send({ date, period, records: [{ studentId: ctx.students[0].id, status: 'PRESENT' }] });
 
-    expect((await call(ctx.staff, lastWeek, 'AM')).status).toBe(403);
+    // The teacher takes the roll call of the day, not of a past day.
+    expect((await call(ctx.prof, ctx.today, 'AM')).status).toBe(200);
+    expect((await call(ctx.prof, lastWeek, 'AM')).status).toBe(403);
     expect((await call(ctx.admin, nextWeek, 'AM')).status).toBe(403);
-    // The admin corrects or catches up a past day that had courses.
+    // Administration and vie scolaire correct or catch up a past day that had courses.
     expect((await call(ctx.admin, lastWeek, 'AM')).status).toBe(200);
+    expect((await call(ctx.staff, lastWeek, 'AM')).status).toBe(200);
     // Six days ago is another weekday: the class had no course.
     expect((await call(ctx.admin, addDays(ctx.today, -6), 'AM')).status).toBe(400);
 
-    const past = (await req.get(`/api/attendance/day?classId=${ctx.classId}&date=${lastWeek}`).set(auth(ctx.staff))).body;
-    expect(past.canEdit).toBe(false);
-    const pastAdmin = (await req.get(`/api/attendance/day?classId=${ctx.classId}&date=${lastWeek}`).set(auth(ctx.admin))).body;
-    expect(pastAdmin.canEdit).toBe(true);
+    const day = (account: string) => req.get(`/api/attendance/day?classId=${ctx.classId}&date=${lastWeek}`).set(auth(account));
+    expect((await day(ctx.prof)).body.canEdit).toBe(false);
+    expect((await day(ctx.staff)).body.canEdit).toBe(true);
+    expect((await day(ctx.admin)).body.canEdit).toBe(true);
   });
 
   it('refuses the afternoon when the class only has morning courses', async () => {

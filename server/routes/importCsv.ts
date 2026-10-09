@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireStaff } from '../middleware/auth';
 import { asyncHandler } from '../lib/errors';
 import { validate } from '../lib/validate';
 import { normalizeKey, studentKey } from '../lib/dedupe';
@@ -10,6 +10,8 @@ import { eurosToCents } from '../lib/money';
 const router = Router();
 
 router.use(authenticate);
+// CSV imports: administration and vie scolaire only (not teachers).
+router.use(requireStaff);
 
 const MAX_ROWS = 5000;
 
