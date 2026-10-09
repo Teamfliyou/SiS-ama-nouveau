@@ -5,10 +5,20 @@ import { getJwtSecret } from '../lib/secret';
 import { AppError } from '../lib/errors';
 import { asyncHandler } from '../lib/errors';
 
+/**
+ * Account roles. STAFF is shown as « Vie scolaire »: everything except accounts,
+ * backups and publishing. TEACHER (« Prof ») only sees the classes they teach.
+ * Family accounts will come with the family space.
+ */
+export const ROLES = ['ADMIN', 'STAFF', 'TEACHER'] as const;
+export type Role = (typeof ROLES)[number];
+
 export interface AuthPayload {
   userId: number;
   email: string;
   role: string;
+  /** Teacher record of a TEACHER account (its classes), null otherwise. */
+  teacherId?: number | null;
 }
 
 declare global {
@@ -40,9 +50,22 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
   if (!user) {
     throw new AppError(401, 'Token invalide ou expiré');
   }
-  req.user = { userId: user.id, email: user.email, role: user.role };
+  req.user = { userId: user.id, email: user.email, role: user.role, teacherId: user.teacherId };
   next();
 });
+
+/** Lets only the given roles through (403 otherwise). */
+export const requireRole =
+  (...roles: Role[]) =>
+  (req: Request, res: Response, next: NextFunction) => {
+    if (!roles.includes(req.user?.role as Role)) {
+      return void res.status(403).json({ error: "Votre compte n'a pas accès à cette fonction" });
+    }
+    next();
+  };
+
+/** Administration and vie scolaire (not teachers). */
+export const requireStaff = requireRole('ADMIN', 'STAFF');
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.user?.role !== 'ADMIN') {

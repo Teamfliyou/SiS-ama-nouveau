@@ -24,6 +24,7 @@ import {
   nextHizb,
   type CompetencyLevel,
 } from '../lib/quran';
+import { assertClassAccess, assertStudentsAccess } from '../lib/access';
 
 // Quran competencies, per student and term. The programme is split into 11 levels
 // and each student works on their own level (Student.quranLevel): levels 1 to 4 are
@@ -55,6 +56,7 @@ router.get(
     if (!classId || !termId) throw new AppError(400, 'classId et termId requis');
     const cid = parseId(classId, 'Identifiant de classe invalide');
     const tid = parseId(termId, 'Identifiant de période invalide');
+    await assertClassAccess(req, cid);
     const term = await prisma.term.findUnique({ where: { id: tid } });
     if (!term) throw new AppError(404, 'Période introuvable');
 
@@ -121,6 +123,7 @@ router.put(
       levels: { surahNumber: number; level: CompetencyLevel | null }[];
     };
     await checkStudentAndTerm(studentId, termId);
+    await assertStudentsAccess(req, [studentId]);
     if (new Set(levels.map((l) => l.surahNumber)).size !== levels.length) {
       throw new AppError(400, 'Une sourate est présente deux fois');
     }
@@ -156,6 +159,7 @@ router.put(
       rubs: { hizb: number; quarter: number; level: CompetencyLevel | null }[];
     };
     await checkStudentAndTerm(studentId, termId);
+    await assertStudentsAccess(req, [studentId]);
     if (new Set(rubs.map((r) => rubKey(r.hizb, r.quarter))).size !== rubs.length) {
       throw new AppError(400, 'Un rob est présent deux fois');
     }
@@ -186,6 +190,7 @@ router.put(
   validate(quranLevelSchema),
   asyncHandler(async (req, res) => {
     const { studentId, level } = req.body as { studentId: number; level: number };
+    await assertStudentsAccess(req, [studentId]);
     const student = await prisma.student.update({
       where: { id: studentId },
       data: { quranLevel: level },
@@ -201,6 +206,7 @@ router.put(
   validate(quranPathSchema),
   asyncHandler(async (req, res) => {
     const { studentId, path } = req.body as { studentId: number; path: string };
+    await assertStudentsAccess(req, [studentId]);
     const student = await prisma.student.update({
       where: { id: studentId },
       data: { quranPath: path },

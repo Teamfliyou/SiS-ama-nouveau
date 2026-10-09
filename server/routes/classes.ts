@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireStaff } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, classCreateSchema, parseId } from '../lib/validate';
 import { eurosToCents, centsToEuros } from '../lib/money';
+import { classIdFilter } from '../lib/access';
 
 const router = Router();
 
@@ -35,8 +36,11 @@ type ClassItem = {
 // GET /api/classes
 router.get(
   '/',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    // A teacher only gets the classes they teach.
+    const id = await classIdFilter(req);
     const classes = await prisma.class.findMany({
+      where: id ? { id } : {},
       orderBy: { name: 'asc' },
       include: { _count: { select: { students: true } } },
     });
@@ -47,6 +51,7 @@ router.get(
 // POST /api/classes
 router.post(
   '/',
+  requireStaff,
   validate(classCreateSchema),
   asyncHandler(async (req, res) => {
     const { name, tuitionFee } = req.body as { name: string; tuitionFee?: number };
@@ -60,6 +65,7 @@ router.post(
 // PUT /api/classes/:id
 router.put(
   '/:id',
+  requireStaff,
   validate(classCreateSchema),
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de classe invalide');
@@ -79,6 +85,7 @@ router.put(
 // class are removed (cascade). This matches the confirmation message shown in the UI.
 router.delete(
   '/:id',
+  requireStaff,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de classe invalide');
     const existing = await prisma.class.findUnique({ where: { id } });

@@ -1,10 +1,11 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, attendanceCreateSchema, parseId, isRealDateString } from '../lib/validate';
 import { halfDaysOn, canTakeRollCall, schoolToday, PERIOD_LABELS, type HalfDay } from '../lib/attendance';
 import { activityName } from '../lib/schedule';
+import { assertClassAccess, assertStudentsAccess } from '../lib/access';
 
 // Roll call: one per class and half-day of its timetable, on the day itself
 // (an admin may correct or catch up a past day).
@@ -12,18 +13,24 @@ const router = Router();
 
 router.use(authenticate);
 
-function readClassAndDate(query: Record<string, string | undefined>) {
-  const { classId, date } = query;
+/** The class and date of a request, once checked that the account may see the class. */
+async function readClassAndDate(req: Request) {
+  const { classId, date } = req.query as Record<string, string | undefined>;
   if (!classId || !date) throw new AppError(400, 'classId et date requis');
   if (!isRealDateString(date)) throw new AppError(400, 'Date invalide (format YYYY-MM-DD)');
-  return { cid: parseId(classId, 'Identifiant de classe invalide'), date };
+  const cid = parseId(classId, 'Identifiant de classe invalide');
+  await assertClassAccess(req, cid);
+  return { cid, date };
 }
+
+/** Administration and vie scolaire may correct or catch up a past day. */
+const canCorrectPast = (req: Request) => req.user?.role === 'ADMIN' || req.user?.role === 'STAFF';
 
 // GET /api/attendance?classId=&date= — every record of the class that day (all half-days).
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const { cid, date } = readClassAndDate(req.query as Record<string, string | undefined>);
+    const { cid, date } = await readClassAndDate(req);
     const records = await prisma.attendance.findMany({ where: { classId: cid, date } });
     res.json(records);
   })
@@ -35,19 +42,18 @@ router.get(
 router.get(
   '/day',
   asyncHandler(async (req, res) => {
-    const { cid, date } = readClassAndDate(req.query as Record<string, string | undefined>);
+    const { cid, date } = await readClassAndDate(req);
     const [slots, records] = await Promise.all([
       prisma.timetableSlot.findMany({ where: { classId: cid }, include: { subject: { select: { name: true } } } }),
       prisma.attendance.findMany({ where: { classId: cid, date }, select: { studentId: true, status: true, period: true } }),
     ]);
     const today = schoolToday();
-    const isAdmin = req.user?.role === 'ADMIN';
     const recordsOf = (period: string) =>
       records.filter((r) => r.period === period).map(({ studentId, status }) => ({ studentId, status }));
     res.json({
       date,
       today,
-      canEdit: canTakeRollCall(date, isAdmin, today),
+      canEdit: canTakeRollCall(date, canCorrectPast(req), today),
       hasTimetable: slots.length > 0,
       halfDays: halfDaysOn(slots, date).map(({ period, slots: courses }) => ({
         period,
@@ -73,6 +79,7 @@ router.get(
     const { classId } = req.query as { classId?: string };
     if (!classId) throw new AppError(400, 'classId requis');
     const cid = parseId(classId, 'Identifiant de classe invalide');
+    await assertClassAccess(req, cid);
     const rows = await prisma.attendance.groupBy({
       by: ['date', 'period', 'status'],
       where: { classId: cid },
@@ -117,16 +124,16 @@ router.post(
       period: HalfDay;
       records: { studentId: number; classId?: number | null; status: 'PRESENT' | 'ABSENT' | 'LATE' }[];
     };
-    const isAdmin = req.user?.role === 'ADMIN';
-    if (!canTakeRollCall(date, isAdmin)) {
+    if (!canTakeRollCall(date, canCorrectPast(req))) {
       throw new AppError(
         403,
         date > schoolToday()
           ? "Impossible de faire l'appel d'un jour à venir"
-          : "L'appel se fait le jour même : seul un administrateur peut corriger un jour passé"
+          : "L'appel se fait le jour même : seules la direction et la vie scolaire peuvent corriger un jour passé"
       );
     }
 
+    await assertStudentsAccess(req, records.map((r) => r.studentId));
     const students = await prisma.student.findMany({
       where: { id: { in: records.map((r) => r.studentId) } },
       select: { id: true, classId: true },

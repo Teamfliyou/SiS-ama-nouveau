@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireStaff } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, teacherCreateSchema, parseId } from '../lib/validate';
 
@@ -23,6 +23,7 @@ router.get(
 // POST /api/teachers
 router.post(
   '/',
+  requireStaff,
   validate(teacherCreateSchema),
   asyncHandler(async (req, res) => {
     const { firstName, lastName, subject, email, phone, classId } = req.body as {
@@ -44,6 +45,7 @@ router.post(
 // PUT /api/teachers/:id
 router.put(
   '/:id',
+  requireStaff,
   validate(teacherCreateSchema),
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de professeur invalide');
@@ -69,6 +71,7 @@ router.put(
 // DELETE /api/teachers/:id
 router.delete(
   '/:id',
+  requireStaff,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de professeur invalide');
     const existing = await prisma.teacher.findUnique({ where: { id } });

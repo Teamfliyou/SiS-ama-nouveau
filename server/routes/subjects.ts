@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireStaff } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, subjectSchema, parseId } from '../lib/validate';
 
@@ -23,6 +23,7 @@ router.get(
 // POST /api/subjects
 router.post(
   '/',
+  requireStaff,
   validate(subjectSchema),
   asyncHandler(async (req, res) => {
     const { name, coefficient } = req.body as { name: string; coefficient: number };
@@ -34,6 +35,7 @@ router.post(
 // PUT /api/subjects/:id
 router.put(
   '/:id',
+  requireStaff,
   validate(subjectSchema),
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de matière invalide');
@@ -47,6 +49,7 @@ router.put(
 // so nothing is ever lost silently.
 router.delete(
   '/:id',
+  requireStaff,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de matière invalide');
     const existing = await prisma.subject.findUnique({

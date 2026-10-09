@@ -26,7 +26,17 @@ export const passwordSchema = z
   .max(128, 'Le mot de passe est trop long')
   .refine((v) => v.trim().length > 0, { message: 'Le mot de passe ne peut pas être vide' });
 
-export const roleSchema = z.enum(['ADMIN', 'STAFF'], { message: 'Rôle invalide' });
+export const roleSchema = z.enum(['ADMIN', 'STAFF', 'TEACHER'], { message: 'Rôle invalide' });
+
+const teacherIdSchema = z.number().int().positive('Professeur invalide').nullable().optional();
+
+/** A Prof account must be linked to its teacher record; the other roles never are. */
+const linkTeacher = <T extends { role: string; teacherId?: number | null }>(schema: z.ZodType<T>) =>
+  schema
+    .refine((v) => v.role !== 'TEACHER' || !!v.teacherId, {
+      message: 'Choisissez la fiche du professeur pour un compte Prof',
+    })
+    .transform((v) => ({ ...v, teacherId: v.role === 'TEACHER' ? (v.teacherId as number) : null }));
 
 export const nameField = (field: string, max = 120) =>
   z
@@ -104,15 +114,16 @@ export const passwordChangeSchema = z.object({
   newPassword: passwordSchema,
 });
 
-export const userCreateSchema = z.object({
-  email: emailSchema,
-  password: passwordSchema,
-  role: roleSchema.default('STAFF'),
-});
+export const userCreateSchema = linkTeacher(
+  z.object({
+    email: emailSchema,
+    password: passwordSchema,
+    role: roleSchema.default('STAFF'),
+    teacherId: teacherIdSchema,
+  })
+);
 
-export const roleUpdateSchema = z.object({
-  role: roleSchema,
-});
+export const roleUpdateSchema = linkTeacher(z.object({ role: roleSchema, teacherId: teacherIdSchema }));
 
 /** Optional DB id. HTML selects send it as text ("3"), so numeric strings are accepted; '' means none. */
 const optionalIdSchema = (message: string) =>
