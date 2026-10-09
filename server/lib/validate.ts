@@ -9,6 +9,7 @@ import {
   MAP_HIZBS,
   QURAN_PATH_CODES,
 } from './quran';
+import { HALF_DAYS } from './attendance';
 
 // ─── Common primitives ────────────────────────────────────────────────
 
@@ -26,6 +27,15 @@ export const passwordSchema = z
   .refine((v) => v.trim().length > 0, { message: 'Le mot de passe ne peut pas être vide' });
 
 export const roleSchema = z.enum(['ADMIN', 'STAFF', 'TEACHER'], { message: 'Rôle invalide' });
+const teacherIdSchema = z.number().int().positive('Professeur invalide').nullable().optional();
+
+/** Un compte Prof doit être lié à sa fiche professeur. */
+const linkTeacher = <T extends { role: string; teacherId?: number | null }>(schema: z.ZodType<T>) =>
+  schema
+    .refine((v) => v.role !== 'TEACHER' || !!v.teacherId, {
+      message: 'Choisissez la fiche du professeur pour un compte Prof',
+    })
+    .transform((v) => ({ ...v, teacherId: v.role === 'TEACHER' ? (v.teacherId as number) : null }));
 
 export const nameField = (field: string, max = 120) =>
   z
@@ -103,15 +113,16 @@ export const passwordChangeSchema = z.object({
   newPassword: passwordSchema,
 });
 
-export const userCreateSchema = z.object({
-  email: emailSchema,
-  password: passwordSchema,
-  role: roleSchema.default('STAFF'),
-});
+export const userCreateSchema = linkTeacher(
+  z.object({
+    email: emailSchema,
+    password: passwordSchema,
+    role: roleSchema.default('STAFF'),
+    teacherId: teacherIdSchema,
+  })
+);
 
-export const roleUpdateSchema = z.object({
-  role: roleSchema,
-});
+export const roleUpdateSchema = linkTeacher(z.object({ role: roleSchema, teacherId: teacherIdSchema }));
 
 /** Optional DB id. HTML selects send it as text ("3"), so numeric strings are accepted; '' means none. */
 const optionalIdSchema = (message: string) =>
@@ -265,6 +276,7 @@ export const schoolYearUpdateSchema = z.object({
 
 export const attendanceCreateSchema = z.object({
   date: dateStringSchema,
+  period: z.enum(HALF_DAYS, { message: 'Demi-journée invalide (AM ou PM)' }),
   records: z
     .array(
       z.object({
@@ -517,6 +529,23 @@ export const preRegistrationValidateSchema = z.object({
   children: z
     .array(z.object({ id: z.number().int().positive(), classId: z.number().int().positive().nullable() }))
     .min(1, 'Aucun enfant à inscrire'),
+});
+
+// ─── Messagerie and documents ────────────────────────────────────────
+
+export const announcementSchema = z.object({
+  title: nameField('Le titre', 150),
+  body: nameField('Le message', 5000),
+  pinned: z.boolean().default(false),
+});
+
+export const DOCUMENT_CATEGORIES = ['REGLEMENT', 'INFORMATION', 'AUTRE'] as const;
+
+/** Title, category and description of a document (the file itself is sent separately). */
+export const documentInfoSchema = z.object({
+  title: nameField('Le titre', 150),
+  category: z.enum(DOCUMENT_CATEGORIES, { message: 'Catégorie invalide' }).default('INFORMATION'),
+  description: optionalTextField('La description', 500),
 });
 
 // ─── Middleware ───────────────────────────────────────────────────────

@@ -1,5 +1,15 @@
 import { describe, it, beforeEach, expect } from 'vitest';
-import { req, resetDb, adminToken, auth, uniqueEmail, tokenFor, createUser, TEST_PASSWORD } from './helpers';
+import {
+  req,
+  resetDb,
+  adminToken,
+  auth,
+  uniqueEmail,
+  tokenFor,
+  createUser,
+  TEST_PASSWORD,
+  morningCourseEveryDay,
+} from './helpers';
 
 async function tokenOf(token: string) {
   return { Authorization: `Bearer ${token}` };
@@ -110,10 +120,11 @@ describe('classes, students, finances (exact cents) and attendance', () => {
     const stu = (
       await req.post('/api/students').set(auth(token)).send({ firstName: 'A', lastName: 'B', classId: cls.id })
     ).body;
+    await morningCourseEveryDay(token, cls.id);
     const good = await req
       .post('/api/attendance')
       .set(auth(token))
-      .send({ date: '2026-09-09', records: [{ studentId: stu.id, status: 'PRESENT' }] });
+      .send({ date: '2026-09-09', period: 'AM', records: [{ studentId: stu.id, status: 'PRESENT' }] });
     expect(good.status).toBe(200);
     const list = await req.get(`/api/attendance?classId=${cls.id}&date=2026-09-09`).set(auth(token));
     expect(list.status).toBe(200);
@@ -122,7 +133,7 @@ describe('classes, students, finances (exact cents) and attendance', () => {
     const badStatus = await req
       .post('/api/attendance')
       .set(auth(token))
-      .send({ date: '2026-09-09', records: [{ studentId: stu.id, status: 'SOMEWHERE' }] });
+      .send({ date: '2026-09-09', period: 'AM', records: [{ studentId: stu.id, status: 'SOMEWHERE' }] });
     expect(badStatus.status).toBe(400);
 
     const badDate = await req.get('/api/attendance?classId=1&date=09/09/2026').set(auth(token));
@@ -134,7 +145,7 @@ describe('classes, students, finances (exact cents) and attendance', () => {
     const impossiblePost = await req
       .post('/api/attendance')
       .set(auth(token))
-      .send({ date: '2026-02-31', records: [{ studentId: stu.id, status: 'PRESENT' }] });
+      .send({ date: '2026-02-31', period: 'AM', records: [{ studentId: stu.id, status: 'PRESENT' }] });
     expect(impossiblePost.status).toBe(400);
   });
 
@@ -146,7 +157,7 @@ describe('classes, students, finances (exact cents) and attendance', () => {
     const res = await req
       .post('/api/attendance')
       .set(auth(token))
-      .send({ date: '2026-09-09', records: [{ studentId: stu.id, status: 'PRESENT' }] });
+      .send({ date: '2026-09-09', period: 'AM', records: [{ studentId: stu.id, status: 'PRESENT' }] });
     expect(res.status).toBe(400);
   });
 

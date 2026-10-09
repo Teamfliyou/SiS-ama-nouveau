@@ -1,3 +1,5 @@
+import { schoolToday } from '../lib/attendance';
+import { isoDayOfWeek } from '../lib/schedule';
 import { describe, it, beforeEach, expect } from 'vitest';
 import { req, resetDb, adminToken, auth, createUser, uniqueEmail, tokenFor } from './helpers';
 
@@ -15,11 +17,16 @@ async function seedBusinessData(token: string): Promise<{ classId: number; stude
   const stu = (
     await req.post('/api/students').set(auth(token)).send({ firstName: 'Zoe', lastName: 'Adam', classId: cls.id })
   ).body;
+  const dayOfWeek = isoDayOfWeek(schoolToday());
+  const slot = await req.post('/api/timetable').set(auth(token)).send({
+    classId: cls.id, dayOfWeek, startTime: '09:00', endTime: '12:00', label: 'Cours'
+  });
+  expect(slot.status).toBe(201);
   await req.post('/api/finances').set(auth(token)).send({ amount: 60, studentId: stu.id });
   await req
     .post('/api/attendance')
     .set(auth(token))
-    .send({ date: '2026-09-09', records: [{ studentId: stu.id, status: 'PRESENT' }] });
+    .send({ date: schoolToday(), period: 'AM', records: [{ studentId: stu.id, status: 'PRESENT' }] });
   return { classId: cls.id, studentId: stu.id };
 }
 

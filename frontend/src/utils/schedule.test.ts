@@ -4,13 +4,48 @@ import {
   addMinutes,
   formatDuration,
   formatLongDate,
+  halfDayOf,
+  halfDaysOn,
   homeworkMessage,
   isoDayOfWeek,
   localToday,
   minutesBetween,
   nextSessionDate,
+  upcomingHalfDays,
   type Lesson,
 } from './schedule';
+
+describe('roll call half-days', () => {
+  // Saturday morning (2 courses) and afternoon, Wednesday afternoon.
+  const slots = [
+    { dayOfWeek: 6, startTime: '10:30' },
+    { dayOfWeek: 6, startTime: '09:00' },
+    { dayOfWeek: 6, startTime: '14:00' },
+    { dayOfWeek: 3, startTime: '14:00' },
+  ];
+
+  it('splits the courses of a day into morning and afternoon', () => {
+    expect(halfDayOf('12:59')).toBe('AM');
+    expect(halfDayOf('13:00')).toBe('PM');
+    expect(halfDaysOn(slots, '2026-10-10').map((h) => [h.period, h.slots.map((s) => s.startTime)])).toEqual([
+      ['AM', ['09:00', '10:30']],
+      ['PM', ['14:00']],
+    ]);
+    expect(halfDaysOn(slots, '2026-10-11')).toEqual([]);
+  });
+
+  it('lists the next half-days with courses for the printed sheet', () => {
+    // From Saturday 10: Sat AM, Sat PM, Wed 14 PM, Sat 17 AM, Sat 17 PM.
+    expect(upcomingHalfDays(slots, '2026-10-10', 5).map((h) => `${h.date} ${h.period}`)).toEqual([
+      '2026-10-10 AM',
+      '2026-10-10 PM',
+      '2026-10-14 PM',
+      '2026-10-17 AM',
+      '2026-10-17 PM',
+    ]);
+    expect(upcomingHalfDays([], '2026-10-10', 5)).toEqual([]);
+  });
+});
 
 // 2026-10-10 is a Saturday, 2026-10-11 a Sunday.
 const slot = (dayOfWeek: number, subjectId: number | null, label: string | null = null) => ({ dayOfWeek, subjectId, label });

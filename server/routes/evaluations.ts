@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, evaluationSchema, gradesSaveSchema, parseId } from '../lib/validate';
 import { round2 } from '../lib/reportCard';
+import { assertClassAccess } from '../lib/access';
 
 const router = Router();
 
@@ -27,8 +28,10 @@ router.get(
   asyncHandler(async (req, res) => {
     const { classId, termId, subjectId } = req.query as Record<string, string | undefined>;
     if (!classId) throw new AppError(400, 'classId requis');
+    const cid = parseId(classId, 'Identifiant de classe invalide');
+    await assertClassAccess(req, cid);
     const where = {
-      classId: parseId(classId, 'Identifiant de classe invalide'),
+      classId: cid,
       ...(termId ? { termId: parseId(termId, 'Identifiant de période invalide') } : {}),
       ...(subjectId ? { subjectId: parseId(subjectId, 'Identifiant de matière invalide') } : {}),
     };
@@ -56,6 +59,7 @@ router.post(
   validate(evaluationSchema),
   asyncHandler(async (req, res) => {
     const data = req.body as EvaluationBody;
+    await assertClassAccess(req, data.classId);
     const evaluation = await prisma.evaluation.create({ data, include: { subject: true, term: true } });
     res.status(201).json(evaluation);
   })
@@ -68,6 +72,10 @@ router.put(
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, "Identifiant d'évaluation invalide");
     const data = req.body as EvaluationBody;
+    const existing = await prisma.evaluation.findUnique({ where: { id }, select: { classId: true } });
+    if (!existing) throw new AppError(404, 'Évaluation introuvable');
+    await assertClassAccess(req, existing.classId);
+    await assertClassAccess(req, data.classId);
     const best = await prisma.grade.aggregate({ where: { evaluationId: id }, _max: { scoreCents: true } });
     if (best._max.scoreCents !== null && best._max.scoreCents > data.maxScore * 100) {
       throw new AppError(400, `Une note saisie dépasse le nouveau barème (/${data.maxScore})`);
@@ -84,6 +92,7 @@ router.delete(
     const id = parseId(req.params.id, "Identifiant d'évaluation invalide");
     const existing = await prisma.evaluation.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, 'Évaluation introuvable');
+    await assertClassAccess(req, existing.classId);
     await prisma.evaluation.delete({ where: { id } });
     res.json({ success: true });
   })
@@ -100,6 +109,7 @@ router.get(
       include: { subject: true, term: true, class: true, grades: true },
     });
     if (!evaluation) throw new AppError(404, 'Évaluation introuvable');
+    await assertClassAccess(req, evaluation.classId);
     const { grades, ...ev } = evaluation;
     const students = await prisma.student.findMany({
       where: { OR: [{ classId: ev.classId }, { id: { in: grades.map((g) => g.studentId) } }] },
@@ -126,6 +136,7 @@ router.put(
     const { grades } = req.body as { grades: { studentId: number; score: number | null; absent: boolean }[] };
     const evaluation = await prisma.evaluation.findUnique({ where: { id }, include: { grades: true } });
     if (!evaluation) throw new AppError(404, 'Évaluation introuvable');
+    await assertClassAccess(req, evaluation.classId);
 
     const already = new Set(evaluation.grades.map((g) => g.studentId));
     const inClass = new Set(

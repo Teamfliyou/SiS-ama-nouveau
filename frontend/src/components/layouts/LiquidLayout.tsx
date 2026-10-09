@@ -17,6 +17,7 @@ import LiquidSidebar from '../liquid/LiquidSidebar';
 import BottomNav from '../liquid/BottomNav';
 import GlassModal from '../liquid/GlassModal';
 import ChangePasswordForm from '../settings/ChangePasswordForm';
+import { canOpen, roleInfo } from '../../utils/roles';
 
 /**
  * Layout Liquid Glass : sidebar flottante repliable, header minimal sans
@@ -27,7 +28,8 @@ export default function LiquidLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const theme = useUiTheme();
-  const isAdmin = localStorage.getItem('role') === 'ADMIN';
+  const userRole = localStorage.getItem('role') || '';
+  const isAdmin = userRole === 'ADMIN';
   const userEmail = localStorage.getItem('user') || 'Administrateur';
   const userInitials = userEmail.slice(0, 2).toUpperCase();
 
@@ -38,7 +40,9 @@ export default function LiquidLayout() {
   const [pwdOpen, setPwdOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  const groups = buildNavigation(isAdmin);
+  const groups = buildNavigation(isAdmin)
+    .map(group => ({ ...group, items: group.items.filter(item => canOpen(userRole, item.href)) }))
+    .filter(group => group.items.length > 0);
   const title = pageTitle(location.pathname);
 
   useEffect(() => {
@@ -63,7 +67,7 @@ export default function LiquidLayout() {
     { name: 'Import CSV', href: '/import-csv', icon: UploadCloud },
     { name: 'Paramètres', href: '/settings', icon: SettingsIcon },
     ...(isAdmin ? [{ name: 'Utilisateurs', href: '/users', icon: ShieldCheck }] : []),
-  ];
+  ].filter(item => canOpen(userRole, item.href));
 
   return (
     <div className="lg-app min-h-screen" data-liquid-layout>
@@ -99,7 +103,7 @@ export default function LiquidLayout() {
                   <span className="lg-avatar h-9 w-9 text-xs">{userInitials}</span>
                   <span className="hidden sm:block text-left max-w-[10rem]">
                     <span className="block text-xs font-semibold text-slate-700 truncate">{userEmail}</span>
-                    <span className="block text-[11px] text-slate-400">{isAdmin ? 'Administrateur' : 'Staff'}</span>
+                    <span className="block text-[11px] text-slate-400">{roleInfo(userRole).label}</span>
                   </span>
                   <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${profileOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                 </button>
@@ -109,7 +113,7 @@ export default function LiquidLayout() {
                     <div className="px-3 py-2.5">
                       <p className="text-sm font-semibold text-slate-800 truncate">{userEmail}</p>
                       <span className={`lg-badge mt-1 ${isAdmin ? 'lg-badge-accent' : ''}`}>
-                        {isAdmin ? 'Administrateur' : 'Staff'}
+                        {roleInfo(userRole).label}
                       </span>
                     </div>
                     <div className="lg-hairline" />
@@ -144,7 +148,7 @@ export default function LiquidLayout() {
         </div>
       </div>
 
-      <BottomNav pathname={location.pathname} onOpenMore={() => setMoreOpen(true)} />
+      <BottomNav role={userRole} pathname={location.pathname} onOpenMore={() => setMoreOpen(true)} />
 
       {/* Feuille « Plus » (mobile) */}
       <GlassModal open={moreOpen} onClose={() => setMoreOpen(false)} title="Plus" description="Toutes les sections" size="sm">

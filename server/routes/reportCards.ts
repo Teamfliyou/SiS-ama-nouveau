@@ -5,6 +5,7 @@ import { asyncHandler, AppError } from '../lib/errors';
 import { validate, reportRemarkSchema, parseId } from '../lib/validate';
 import { computeClassResults } from '../lib/reportCard';
 import { ymdToDate } from '../lib/dates';
+import { assertClassAccess, assertStudentsAccess } from '../lib/access';
 import {
   QURAN_LEVELS,
   QURAN_PATHS,
@@ -33,6 +34,7 @@ router.get(
     const cid = parseId(classId, 'Identifiant de classe invalide');
     const tid = parseId(termId, 'Identifiant de période invalide');
     const sid = studentId ? parseId(studentId, "Identifiant d'élève invalide") : null;
+    await assertClassAccess(req, cid);
 
     const [cls, term] = await Promise.all([
       prisma.class.findUnique({ where: { id: cid }, select: { id: true, name: true } }),
@@ -127,6 +129,7 @@ router.put(
   validate(reportRemarkSchema),
   asyncHandler(async (req, res) => {
     const { studentId, termId, comment } = req.body as { studentId: number; termId: number; comment: string };
+    await assertStudentsAccess(req, [studentId]);
     const [student, term] = await Promise.all([
       prisma.student.findUnique({ where: { id: studentId }, select: { id: true } }),
       prisma.term.findUnique({ where: { id: termId }, select: { id: true } }),

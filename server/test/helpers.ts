@@ -49,9 +49,25 @@ export async function adminSession(): Promise<{ token: string; id: number }> {
   return { token, id: admin.id };
 }
 
+/**
+ * Gives a class a morning course every day of the week, so that a roll call can be
+ * recorded on any date (roll calls follow the timetable).
+ */
+export async function morningCourseEveryDay(token: string, classId: number) {
+  for (let dayOfWeek = 1; dayOfWeek <= 7; dayOfWeek++) {
+    const res = await req
+      .post('/api/timetable')
+      .set(auth(token))
+      .send({ classId, dayOfWeek, startTime: '09:00', endTime: '10:00', label: 'Coran' });
+    if (res.status !== 201) throw new Error(`timetable slot failed: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+}
+
 /** Empties all tables (FK-safe order). Called before each test. */
 export async function resetDb() {
   assertTestDatabaseUrl(process.env.DATABASE_URL ?? '');
+  await prisma.announcement.deleteMany();
+  await prisma.document.deleteMany();
   await prisma.teacherClass.deleteMany();
   await prisma.enrollment.deleteMany();
   await prisma.preRegistration.deleteMany();

@@ -5,7 +5,8 @@ import Classes from './pages/Classes';
 import Students from './pages/Students';
 import Finances from './pages/Finances';
 import Attendance from './pages/Attendance';
-import AttendanceSheets from './pages/AttendanceSheets';
+import Messages from './pages/Messages';
+import Documents from './pages/Documents';
 import CsvImport from './pages/CsvImport';
 import UsersAdmin from './pages/UsersAdmin';
 import Teachers from './pages/Teachers';
@@ -64,6 +65,8 @@ function App() {
           <Route path="settings" element={<ThemedPage classic={Settings} liquid={LiquidSettings} />} />
           {/* Scolarité : même page dans les deux apparences (le layout Liquid l'habille). */}
           <Route path="pre-registrations" element={<PreRegistrations />} />
+          <Route path="messagerie" element={<Messages />} />
+          <Route path="documents" element={<Documents />} />
           <Route path="timetable" element={<Timetable />} />
           <Route path="lessons" element={<LessonLog />} />
           <Route path="grades" element={<Grades />} />

@@ -81,7 +81,7 @@ const HIZB_STARTS: [number, string, number][] = [
   [7, "Al-A'raf", 1], [7, "Al-A'raf", 88], [7, "Al-A'raf", 171], [8, 'Al-Anfal', 41], [9, 'At-Tawba', 34],
   [9, 'At-Tawba', 93], [10, 'Yunus', 26], [11, 'Hud', 6], [11, 'Hud', 84], [12, 'Yusuf', 53],
   [13, "Ar-Ra'd", 19], [15, 'Al-Hijr', 1], [16, 'An-Nahl', 51], [17, 'Al-Isra', 1], [17, 'Al-Isra', 99],
-  [18, 'Al-Kahf', 75], [19, 'Maryam', 59], [21, 'Al-Anbiya', 1], [22, 'Al-Hajj', 1], [23, "Al-Mu'minun", 1],
+  [18, 'Al-Kahf', 75], [20, 'Ta-Ha', 1], [21, 'Al-Anbiya', 1], [22, 'Al-Hajj', 1], [23, "Al-Mu'minun", 1],
   [24, 'An-Nur', 21], [25, 'Al-Furqan', 21], [26, "Ash-Shu'ara", 111], [27, 'An-Naml', 56], [28, 'Al-Qasas', 51],
   [29, "Al-'Ankabut", 46], [31, 'Luqman', 22], [33, 'Al-Ahzab', 31], [34, 'Saba', 24], [36, 'Ya-Sin', 28],
   [37, 'As-Saffat', 145], [39, 'Az-Zumar', 32], [40, 'Ghafir', 41], [41, 'Fussilat', 47], [43, 'Az-Zukhruf', 24],

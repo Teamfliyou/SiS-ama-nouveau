@@ -7,6 +7,8 @@ import {
   ClipboardList,
   CreditCard,
   FileText,
+  Megaphone,
+  FolderOpen,
   GraduationCap,
   Home,
   NotebookPen,
@@ -54,6 +56,13 @@ export function buildNavigation(isAdmin: boolean): NavGroup[] {
         { name: 'Matières & périodes', href: '/school-settings', icon: BookMarked },
       ],
     },
+    {
+      label: 'Communication',
+      items: [
+        { name: 'Messagerie', href: '/messagerie', icon: Megaphone },
+        { name: 'Documents', href: '/documents', icon: FolderOpen },
+      ],
+    },
     { label: 'Outils', items: [{ name: 'Import CSV', href: '/import-csv', icon: UploadCloud }] },
     {
       label: 'Administration',
@@ -94,6 +103,8 @@ export const PAGE_TITLES: Record<string, string> = {
   '/import-csv': 'Import CSV',
   '/users': 'Utilisateurs',
   '/settings': 'Paramètres',
+  '/messagerie': 'Messagerie',
+  '/documents': 'Documents',
 };
 
 export function pageTitle(pathname: string): string {

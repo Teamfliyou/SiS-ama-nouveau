@@ -3,13 +3,14 @@ import {
   LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu,
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
   ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer, Settings,
-  NotebookPen, Sparkles, FileText, BookMarked, CalendarDays, NotebookText, UserPlus
+  NotebookPen, Sparkles, FileText, BookMarked, CalendarDays, NotebookText, UserPlus, Megaphone, FolderOpen
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../../utils/api';
 import Sheet from '../mobile/Sheet';
 import { MobileHeader, MobileTabBar, MoreSheet } from '../mobile/MobileNav';
-import { TAB_ITEMS } from '../mobile/nav';
+import { tabItemsFor } from '../mobile/nav';
+import { canOpen, roleInfo } from '../../utils/roles';
 
 /**
  * Layout historique de SiS AMA. Il est rendu tel quel lorsque l'utilisateur a
@@ -59,6 +60,8 @@ export default function ClassicLayout() {
     { name: 'Appel',           href: '/attendance',   icon: ClipboardList },
     { name: 'Feuilles d\'appel', href: '/attendance-sheets', icon: Printer },
     { name: 'Pré-inscriptions', href: '/pre-registrations', icon: UserPlus },
+    { name: 'Messagerie', href: '/messagerie', icon: Megaphone },
+    { name: 'Documents', href: '/documents', icon: FolderOpen },
     { name: 'Emploi du temps', href: '/timetable', icon: CalendarDays },
     { name: 'Cahier de textes', href: '/lessons', icon: NotebookText },
     { name: 'Notes',           href: '/grades',       icon: NotebookPen },
@@ -71,9 +74,11 @@ export default function ClassicLayout() {
   ];
 
   // Mobile : les sections hors barre du bas vont dans le menu « Plus ».
-  const tabHrefs = TAB_ITEMS.map(t => t.href);
-  const secondaryNav = navigation.filter(item => !tabHrefs.includes(item.href));
-  const currentNav = navigation.find(item => item.href === location.pathname);
+  const tabs = tabItemsFor(userRole);
+  const tabHrefs = tabs.map(t => t.href);
+  const visibleNav = navigation.filter(item => canOpen(userRole, item.href));
+  const secondaryNav = visibleNav.filter(item => !tabHrefs.includes(item.href));
+  const currentNav = visibleNav.find(item => item.href === location.pathname);
   const pageTitle = currentNav ? currentNav.name : 'SIS';
 
   const openPasswordModal = () => { setPwdError(''); setPwdSuccess(false); setShowPwdModal(true); };
@@ -108,7 +113,7 @@ export default function ClassicLayout() {
 
       {/* Navigation mobile : header compact + barre du bas + menu « Plus » */}
       <MobileHeader title={pageTitle} initials={userInitials} onAccount={() => setMoreOpen(true)} />
-      <MobileTabBar pathname={location.pathname} moreActive={!!currentNav && !tabHrefs.includes(currentNav.href)} onMore={() => setMoreOpen(true)} />
+      <MobileTabBar items={tabs} pathname={location.pathname} moreActive={!!currentNav && !tabHrefs.includes(currentNav.href)} onMore={() => setMoreOpen(true)} />
       <MoreSheet
         open={isMoreOpen}
         onClose={() => setMoreOpen(false)}
@@ -116,7 +121,7 @@ export default function ClassicLayout() {
         pathname={location.pathname}
         email={userEmail}
         initials={userInitials}
-        isAdmin={isAdmin}
+        roleLabel={roleInfo(userRole).label}
         onPassword={openPasswordModal}
         onLogout={handleLogout}
       />
@@ -133,7 +138,7 @@ export default function ClassicLayout() {
             <img src="/logo.png" alt="ASSO AMA SIS" className="h-14 w-auto object-contain" />
           </div>
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
+            {visibleNav.map((item) => {
               const active = location.pathname === item.href;
               return (
                 <Link key={item.name} to={item.href} onClick={() => setSidebarOpen(false)}
