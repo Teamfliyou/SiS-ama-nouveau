@@ -5,7 +5,7 @@
  * métier attendues par `importPayloadSchema` dans routes/data.ts :
  *   classes, schoolYears, families, students, teachers, payments,
  *   paymentGroups, attendances, enrollments, subjects, terms, evaluations,
- *   surahAssessments, reportRemarks
+ *   surahAssessments, rubAssessments, reportRemarks, announcements
  *
  * Les fichiers peuvent arriver sous plusieurs formes :
  *   - v1 (SQLite) : classes/students/teachers/payments/attendances, montants en
@@ -42,11 +42,14 @@ export const BACKUP_COLLECTIONS = [
   'terms',
   'evaluations',
   'surahAssessments',
+  'rubAssessments',
   'reportRemarks',
   'timetableSlots',
   'lessons',
   'guardians',
   'preRegistrations',
+  // Messagerie (the document files stay in the database, not in the JSON backup).
+  'announcements',
 ] as const;
 
 export type BackupCollection = (typeof BACKUP_COLLECTIONS)[number];

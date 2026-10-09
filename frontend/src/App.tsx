@@ -5,7 +5,8 @@ import Classes from './pages/Classes';
 import Students from './pages/Students';
 import Finances from './pages/Finances';
 import Attendance from './pages/Attendance';
-import AttendanceSheets from './pages/AttendanceSheets';
+import Messages from './pages/Messages';
+import Documents from './pages/Documents';
 import CsvImport from './pages/CsvImport';
 import UsersAdmin from './pages/UsersAdmin';
 import Teachers from './pages/Teachers';
@@ -26,11 +27,8 @@ import LiquidDashboard from './pages/liquid/Dashboard';
 import LiquidStudents from './pages/liquid/Students';
 import LiquidClasses from './pages/liquid/Classes';
 import LiquidTeachers from './pages/liquid/Teachers';
-import LiquidAttendance from './pages/liquid/Attendance';
-import LiquidAttendanceSheets from './pages/liquid/AttendanceSheets';
 import LiquidFinances from './pages/liquid/Finances';
 import LiquidCsvImport from './pages/liquid/CsvImport';
-import LiquidUsersAdmin from './pages/liquid/UsersAdmin';
 import LiquidSettings from './pages/liquid/Settings';
 
 // Protected Route wrapper
@@ -56,14 +54,18 @@ function App() {
           <Route path="classes" element={<ThemedPage classic={Classes} liquid={LiquidClasses} />} />
           <Route path="students" element={<ThemedPage classic={Students} liquid={LiquidStudents} />} />
           <Route path="finances" element={<ThemedPage classic={Finances} liquid={LiquidFinances} />} />
-          <Route path="attendance" element={<ThemedPage classic={Attendance} liquid={LiquidAttendance} />} />
-          <Route path="attendance-sheets" element={<ThemedPage classic={AttendanceSheets} liquid={LiquidAttendanceSheets} />} />
           <Route path="import-csv" element={<ThemedPage classic={CsvImport} liquid={LiquidCsvImport} />} />
-          <Route path="users" element={<ThemedPage classic={UsersAdmin} liquid={LiquidUsersAdmin} />} />
           <Route path="teachers" element={<ThemedPage classic={Teachers} liquid={LiquidTeachers} />} />
           <Route path="settings" element={<ThemedPage classic={Settings} liquid={LiquidSettings} />} />
           {/* Scolarité : même page dans les deux apparences (le layout Liquid l'habille). */}
           <Route path="pre-registrations" element={<PreRegistrations />} />
+          {/* Appel par demi-journée et rôles des comptes : une seule page pour les deux apparences. */}
+          <Route path="attendance" element={<Attendance />} />
+          {/* The roll-call sheets are now a tab of the Appel page. */}
+          <Route path="attendance-sheets" element={<Navigate to="/attendance?vue=feuille" replace />} />
+          <Route path="users" element={<UsersAdmin />} />
+          <Route path="messagerie" element={<Messages />} />
+          <Route path="documents" element={<Documents />} />
           <Route path="timetable" element={<Timetable />} />
           <Route path="lessons" element={<LessonLog />} />
           <Route path="grades" element={<Grades />} />

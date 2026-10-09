@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, expect } from 'vitest';
-import { req, resetDb, adminToken, auth } from './helpers';
+import { req, resetDb, adminToken, auth, morningCourseEveryDay } from './helpers';
 
 describe('school years', () => {
   beforeEach(resetDb);
@@ -140,10 +140,11 @@ describe('attendance and payment enums', () => {
     const stu = (
       await req.post('/api/students').set(auth(token)).send({ firstName: 'A', lastName: 'B', classId: cls.id })
     ).body;
+    await morningCourseEveryDay(token, cls.id);
     const ok = await req
       .post('/api/attendance')
       .set(auth(token))
-      .send({ date: '2026-09-09', records: [{ studentId: stu.id, status: 'EXCUSED' }] });
+      .send({ date: '2026-09-09', period: 'AM', records: [{ studentId: stu.id, status: 'EXCUSED' }] });
     expect(ok.status).toBe(200);
 
     const list = await req.get(`/api/attendance?classId=${cls.id}&date=2026-09-09`).set(auth(token));
@@ -194,10 +195,11 @@ describe('full v3 export -> import round trip', () => {
       .set(auth(token))
       .send({ firstName: 'Marie', lastName: 'Dubois', subject: 'Maths', classIds: [c1.id, c2.id] });
     await req.post('/api/finances').set(auth(token)).send({ amount: 40, studentId: stu.id, method: 'Mobile Money' });
+    await morningCourseEveryDay(token, c1.id);
     await req
       .post('/api/attendance')
       .set(auth(token))
-      .send({ date: '2026-09-09', records: [{ studentId: stu.id, status: 'LATE' }] });
+      .send({ date: '2026-09-09', period: 'AM', records: [{ studentId: stu.id, status: 'LATE' }] });
     return (await req.get('/api/export').set(auth(token))).body;
   };
 

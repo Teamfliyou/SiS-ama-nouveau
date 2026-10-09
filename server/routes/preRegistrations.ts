@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireStaff } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import {
   validate,
@@ -22,6 +22,8 @@ import { confirmationEmail, getRegistrationSettings, takenPlaces } from '../lib/
 const router = Router();
 
 router.use(authenticate);
+// Pre-registrations: administration and vie scolaire only (not teachers).
+router.use(requireStaff);
 
 const fileInclude = {
   children: {

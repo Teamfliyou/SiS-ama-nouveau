@@ -2,14 +2,15 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu,
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
-  ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer, Settings,
-  NotebookPen, Sparkles, FileText, BookMarked, CalendarDays, NotebookText, UserPlus
+  ChevronDown, User, KeyRound, X, Eye, EyeOff, Settings,
+  NotebookPen, Sparkles, FileText, BookMarked, CalendarDays, NotebookText, UserPlus, Megaphone, FolderOpen
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../../utils/api';
 import Sheet from '../mobile/Sheet';
 import { MobileHeader, MobileTabBar, MoreSheet } from '../mobile/MobileNav';
-import { TAB_ITEMS } from '../mobile/nav';
+import { tabItemsFor } from '../mobile/nav';
+import { canOpen, currentRole, roleInfo } from '../../utils/roles';
 
 /**
  * Layout historique de SiS AMA. Il est rendu tel quel lorsque l'utilisateur a
@@ -34,9 +35,10 @@ export default function ClassicLayout() {
   const [pwdSuccess, setPwdSuccess] = useState(false);
 
   const userEmail = localStorage.getItem('user') || 'Administrateur';
-  const userRole = localStorage.getItem('role') || '';
+  const userRole = currentRole();
   const userInitials = userEmail.slice(0, 2).toUpperCase();
   const isAdmin = userRole === 'ADMIN';
+  const role = roleInfo(userRole);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -57,21 +59,23 @@ export default function ClassicLayout() {
     { name: 'Professeurs',     href: '/teachers',     icon: GraduationCap },
     { name: 'Finances',        href: '/finances',     icon: CreditCard },
     { name: 'Appel',           href: '/attendance',   icon: ClipboardList },
-    { name: 'Feuilles d\'appel', href: '/attendance-sheets', icon: Printer },
     { name: 'Pré-inscriptions', href: '/pre-registrations', icon: UserPlus },
     { name: 'Emploi du temps', href: '/timetable', icon: CalendarDays },
     { name: 'Cahier de textes', href: '/lessons', icon: NotebookText },
     { name: 'Notes',           href: '/grades',       icon: NotebookPen },
-    { name: 'Juz Amma',        href: '/competencies', icon: Sparkles },
+    { name: 'Coran',           href: '/competencies', icon: Sparkles },
     { name: 'Bulletins',       href: '/report-cards', icon: FileText },
+    { name: 'Messagerie',      href: '/messagerie',   icon: Megaphone },
+    { name: 'Documents',       href: '/documents',    icon: FolderOpen },
     { name: 'Matières & périodes', href: '/school-settings', icon: BookMarked },
     { name: 'Import CSV',      href: '/import-csv',   icon: UploadCloud },
     ...(isAdmin ? [{ name: 'Utilisateurs', href: '/users', icon: ShieldCheck }] : []),
     { name: 'Paramètres',      href: '/settings',     icon: Settings },
-  ];
+  ].filter((item) => canOpen(userRole, item.href)); // a Prof only gets the work in class
 
   // Mobile : les sections hors barre du bas vont dans le menu « Plus ».
-  const tabHrefs = TAB_ITEMS.map(t => t.href);
+  const tabItems = tabItemsFor(userRole);
+  const tabHrefs = tabItems.map(t => t.href);
   const secondaryNav = navigation.filter(item => !tabHrefs.includes(item.href));
   const currentNav = navigation.find(item => item.href === location.pathname);
   const pageTitle = currentNav ? currentNav.name : 'SIS';
@@ -108,7 +112,7 @@ export default function ClassicLayout() {
 
       {/* Navigation mobile : header compact + barre du bas + menu « Plus » */}
       <MobileHeader title={pageTitle} initials={userInitials} onAccount={() => setMoreOpen(true)} />
-      <MobileTabBar pathname={location.pathname} moreActive={!!currentNav && !tabHrefs.includes(currentNav.href)} onMore={() => setMoreOpen(true)} />
+      <MobileTabBar items={tabItems} pathname={location.pathname} moreActive={!!currentNav && !tabHrefs.includes(currentNav.href)} onMore={() => setMoreOpen(true)} />
       <MoreSheet
         open={isMoreOpen}
         onClose={() => setMoreOpen(false)}
@@ -116,7 +120,7 @@ export default function ClassicLayout() {
         pathname={location.pathname}
         email={userEmail}
         initials={userInitials}
-        isAdmin={isAdmin}
+        roleLabel={role.label}
         onPassword={openPasswordModal}
         onLogout={handleLogout}
       />
@@ -186,7 +190,7 @@ export default function ClassicLayout() {
                 </div>
                 <div className="hidden md:block text-left">
                   <p className="text-sm font-semibold text-slate-700 leading-tight">{userEmail}</p>
-                  <p className="text-xs text-slate-400">{isAdmin ? 'Administrateur' : 'Staff'}</p>
+                  <p className="text-xs text-slate-400">{role.label}</p>
                 </div>
                 <ChevronDown className={`w-4 h-4 text-slate-400 hidden md:block transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -202,8 +206,8 @@ export default function ClassicLayout() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-slate-800 truncate">{userEmail}</p>
-                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${isAdmin ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-600'}`}>
-                          {isAdmin ? 'Admin' : 'Staff'}
+                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 border ${role.badge}`}>
+                          {role.label}
                         </span>
                       </div>
                     </div>

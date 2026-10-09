@@ -8,5 +8,5 @@ export { default as SearchField } from './SearchField';
 export { default as EmptyState } from './EmptyState';
 export { default as BottomNav } from './BottomNav';
 export { default as LiquidSidebar } from './LiquidSidebar';
-export { buildNavigation, pageTitle, MOBILE_PRIMARY } from './navigation';
+export { buildNavigation, pageTitle, MOBILE_PRIMARY, mobilePrimaryFor } from './navigation';
 export type { NavGroup, NavItem } from './navigation';

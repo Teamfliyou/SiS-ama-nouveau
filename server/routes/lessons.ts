@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, lessonSchema, parseId, isRealDateString } from '../lib/validate';
 import { dayName, isoDayOfWeek } from '../lib/schedule';
+import { assertClassAccess, classIdFilter } from '../lib/access';
 
 const router = Router();
 
@@ -106,9 +107,11 @@ router.get(
     if (!classId) throw new AppError(400, 'classId requis');
     const from = dateParam(req.query.from, 'Date de début');
     const to = dateParam(req.query.to, 'Date de fin');
+    const cid = parseId(classId, 'Identifiant de classe invalide');
+    await assertClassAccess(req, cid);
     const lessons = await prisma.lesson.findMany({
       where: {
-        classId: parseId(classId, 'Identifiant de classe invalide'),
+        classId: cid,
         ...(from || to ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
       },
       include: lessonInclude,
@@ -128,7 +131,8 @@ router.get(
       where: {
         homework: { not: null },
         homeworkDueDate: { gte: from },
-        ...(classId ? { classId: parseId(classId, 'Identifiant de classe invalide') } : {}),
+        // A teacher only gets the work of their classes.
+        classId: classId ? parseId(classId, 'Identifiant de classe invalide') : await classIdFilter(req),
       },
       include: lessonInclude,
       orderBy: [{ homeworkDueDate: 'asc' }, { date: 'asc' }, { startTime: { sort: 'asc', nulls: 'last' } }],
@@ -142,6 +146,7 @@ router.post(
   '/',
   validate(lessonSchema),
   asyncHandler(async (req, res) => {
+    await assertClassAccess(req, (req.body as LessonBody).classId);
     const data = await buildLesson(req.body as LessonBody);
     await assertNotLogged(data);
     const lesson = await prisma.lesson.create({ data, include: lessonInclude });
@@ -157,6 +162,8 @@ router.put(
     const id = parseId(req.params.id, 'Identifiant de séance invalide');
     const existing = await prisma.lesson.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, 'Séance introuvable');
+    await assertClassAccess(req, existing.classId);
+    await assertClassAccess(req, (req.body as LessonBody).classId);
     const data = await buildLesson(req.body as LessonBody, existing);
     await assertNotLogged(data, id);
     const lesson = await prisma.lesson.update({ where: { id }, data, include: lessonInclude });
@@ -171,6 +178,7 @@ router.delete(
     const id = parseId(req.params.id, 'Identifiant de séance invalide');
     const existing = await prisma.lesson.findUnique({ where: { id } });
     if (!existing) throw new AppError(404, 'Séance introuvable');
+    await assertClassAccess(req, existing.classId);
     await prisma.lesson.delete({ where: { id } });
     res.json({ success: true });
   })

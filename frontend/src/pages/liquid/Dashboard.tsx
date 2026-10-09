@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { authFetch, safeJson } from '../../utils/api';
 import { formatCurrency } from '../../utils/format';
+import { roleInfo } from '../../utils/roles';
 import { useStats } from '../../hooks/useStats';
 import { useStudents } from '../../hooks/useStudents';
 import { useClasses } from '../../hooks/useClasses';
@@ -37,7 +38,6 @@ type TodayAttendance = { done: number; absent: number; late: number; loading: bo
 
 export default function LiquidDashboard() {
   const navigate = useNavigate();
-  const isAdmin = localStorage.getItem('role') === 'ADMIN';
   const { stats } = useStats();
   const { students } = useStudents();
   const { classes } = useClasses();
@@ -115,7 +115,7 @@ export default function LiquidDashboard() {
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Salutation */}
       <div>
-        <p className="text-sm font-semibold text-primary">{greeting()}, {isAdmin ? 'Administrateur' : 'Staff'}</p>
+        <p className="text-sm font-semibold text-primary">{greeting()}, {roleInfo(localStorage.getItem('role')).label}</p>
         <h1 className="lg-title mt-0.5">Vue d'ensemble</h1>
         <p className="lg-subtitle capitalize">{dateLabel}</p>
       </div>

@@ -15,7 +15,7 @@ import {
   normalizeBackupInput,
   buildBackupFilename,
 } from '../lib/backup';
-import { COMPETENCY_LEVELS, SURAH_NUMBERS } from '../lib/juzAmma';
+import { COMPETENCY_LEVELS, SURAH_NUMBERS, MAX_QURAN_LEVEL, MAP_HIZBS, QURAN_PATH_CODES } from '../lib/quran';
 
 const router = Router();
 
@@ -203,6 +203,8 @@ const importPayloadSchema = z.object({
           })
           .nullable()
           .optional(),
+        quranLevel: z.number().int().min(1).max(MAX_QURAN_LEVEL).optional(),
+        quranPath: z.enum(QURAN_PATH_CODES).optional(),
       })
     )
     .max(MAX_ITEMS)
@@ -318,6 +320,8 @@ const importPayloadSchema = z.object({
           .string()
           .max(40)
           .refine((v) => isParsableDateString(v), { message: 'Date invalide (attendu YYYY-MM-DD)' }),
+        // Backups older than half-day roll calls have no period: whole day.
+        period: z.enum(['AM', 'PM', 'DAY']).default('DAY'),
         studentId: z.number().int().optional(),
         classId: z.number().int().optional(),
         status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']).default('PRESENT'),
@@ -384,6 +388,29 @@ const importPayloadSchema = z.object({
       })
     )
     .max(MAX_ITEMS * 4)
+    .optional(),
+  rubAssessments: z
+    .array(
+      z.object({
+        studentId: z.number().int(),
+        hizb: z.number().int().min(1).max(MAP_HIZBS),
+        quarter: z.number().int().min(1).max(4),
+        level: z.enum(COMPETENCY_LEVELS),
+        term: z.object({ name: z.string() }),
+      })
+    )
+    .max(MAX_ITEMS * 4 * 4)
+    .optional(),
+  announcements: z
+    .array(
+      z.object({
+        title: z.string().trim().min(1).max(150),
+        body: z.string().trim().min(1).max(5000),
+        pinned: z.boolean().default(false),
+        createdAt: z.string().optional(),
+      })
+    )
+    .max(MAX_ITEMS)
     .optional(),
   reportRemarks: z
     .array(
@@ -527,12 +554,14 @@ router.get(
       terms,
       evaluations,
       surahAssessments,
+      rubAssessments,
       reportRemarks,
       timetableSlots,
       lessons,
       guardians,
       preRegistrations,
       registrationSettings,
+      announcements,
     ] = await Promise.all([
         prisma.class.findMany({
           orderBy: { name: 'asc' },
@@ -567,6 +596,7 @@ router.get(
           orderBy: { date: 'asc' },
         }),
         prisma.surahAssessment.findMany({ include: { term: { select: { name: true } } } }),
+        prisma.rubAssessment.findMany({ include: { term: { select: { name: true } } } }),
         prisma.reportRemark.findMany({ include: { term: { select: { name: true } } } }),
       prisma.timetableSlot.findMany({
         include: scheduleRefs,
@@ -582,6 +612,10 @@ router.get(
         orderBy: { id: 'asc' },
       }),
       prisma.registrationSettings.findUnique({ where: { id: 1 } }),
+      prisma.announcement.findMany({
+        select: { title: true, body: true, pinned: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      }),
       ]);
 
     const data = {
@@ -629,12 +663,15 @@ router.get(
       terms,
       evaluations,
       surahAssessments,
+      rubAssessments,
       reportRemarks,
       timetableSlots,
       lessons,
       guardians,
       preRegistrations,
       registrationSettings,
+      // Document files are not in this JSON backup: they stay in the database.
+      announcements,
     };
     const now = new Date();
     res.setHeader('Content-Disposition', `attachment; filename="${buildBackupFilename(now)}"`);
@@ -677,12 +714,14 @@ router.post(
       terms = [],
       evaluations = [],
       surahAssessments = [],
+      rubAssessments = [],
       reportRemarks = [],
       timetableSlots = [],
       lessons = [],
       guardians = [],
       preRegistrations = [],
       registrationSettings = null,
+      announcements = [],
     } = payload;
 
     // `?mode=replace` : supprime d'abord les données métier (jamais les comptes
@@ -873,7 +912,8 @@ router.post(
               dateOfBirth: st.dateOfBirth ? ymdToDate(st.dateOfBirth.slice(0, 10)) : st.birthDate ? ymdToDate(st.birthDate) : null,
               birthDate: st.birthDate ?? st.dateOfBirth?.slice(0, 10) ?? null,
               wasEnrolled2025_2026: st.wasEnrolled2025_2026, arabicCourse: st.arabicCourse, quranCourse: st.quranCourse,
-              gender: st.gender, medicalInfo: st.medicalInfo, photoOptOut: st.photoOptOut, canLeaveAlone: st.canLeaveAlone },
+              gender: st.gender, medicalInfo: st.medicalInfo, photoOptOut: st.photoOptOut, canLeaveAlone: st.canLeaveAlone,
+              quranLevel: st.quranLevel ?? 1, quranPath: st.quranPath ?? 'BOTTOM_UP' },
           });
           studentId = created.id;
           studentIdByKey.set(key, studentId);
@@ -998,9 +1038,9 @@ router.post(
         }
         const storedDate = ymdToDate(a.date.slice(0, 10));
         await tx.attendance.upsert({
-          where: { date_studentId: { date: storedDate, studentId: newStudentId } },
+          where: { date_period_studentId: { date: storedDate, period: a.period, studentId: newStudentId } },
           update: { status: a.status },
-          create: { date: storedDate, studentId: newStudentId, classId: newClassId, status: a.status },
+          create: { date: storedDate, period: a.period, studentId: newStudentId, classId: newClassId, status: a.status },
         });
         attendancesCreated++;
       }
@@ -1115,6 +1155,23 @@ router.post(
           skipDuplicates: true,
         })
       ).count;
+      await tx.rubAssessment.createMany({
+        data: byStudentAndTerm(rubAssessments).map(({ item, studentId, termId }) => ({
+          studentId,
+          termId,
+          hizb: item.hizb,
+          quarter: item.quarter,
+          level: item.level,
+        })),
+        skipDuplicates: true,
+      });
+      // Information already present (same title and text) is kept as is.
+      for (const a of announcements) {
+        if (await tx.announcement.findFirst({ where: { title: a.title, body: a.body }, select: { id: true } })) continue;
+        await tx.announcement.create({
+          data: { title: a.title, body: a.body, pinned: a.pinned, ...(a.createdAt ? { createdAt: new Date(a.createdAt) } : {}) },
+        });
+      }
       await tx.reportRemark.createMany({
         data: byStudentAndTerm(reportRemarks).map(({ item, studentId, termId }) => ({
           studentId,

@@ -5,8 +5,9 @@ import {
   ChevronDown,
   GraduationCap,
   KeyRound,
+  FolderOpen,
   LogOut,
-  Printer,
+  Megaphone,
   Settings as SettingsIcon,
   ShieldCheck,
   UploadCloud,
@@ -17,6 +18,7 @@ import LiquidSidebar from '../liquid/LiquidSidebar';
 import BottomNav from '../liquid/BottomNav';
 import GlassModal from '../liquid/GlassModal';
 import ChangePasswordForm from '../settings/ChangePasswordForm';
+import { canOpen, currentRole, roleInfo } from '../../utils/roles';
 
 /**
  * Layout Liquid Glass : sidebar flottante repliable, header minimal sans
@@ -27,7 +29,9 @@ export default function LiquidLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const theme = useUiTheme();
-  const isAdmin = localStorage.getItem('role') === 'ADMIN';
+  const userRole = currentRole();
+  const isAdmin = userRole === 'ADMIN';
+  const role = roleInfo(userRole);
   const userEmail = localStorage.getItem('user') || 'Administrateur';
   const userInitials = userEmail.slice(0, 2).toUpperCase();
 
@@ -38,7 +42,7 @@ export default function LiquidLayout() {
   const [pwdOpen, setPwdOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  const groups = buildNavigation(isAdmin);
+  const groups = buildNavigation(userRole);
   const title = pageTitle(location.pathname);
 
   useEffect(() => {
@@ -59,11 +63,12 @@ export default function LiquidLayout() {
   const moreItems = [
     { name: 'Classes', href: '/classes', icon: BookOpen },
     { name: 'Professeurs', href: '/teachers', icon: GraduationCap },
-    { name: "Feuilles d'appel", href: '/attendance-sheets', icon: Printer },
+    { name: 'Messagerie', href: '/messagerie', icon: Megaphone },
+    { name: 'Documents', href: '/documents', icon: FolderOpen },
     { name: 'Import CSV', href: '/import-csv', icon: UploadCloud },
     { name: 'Paramètres', href: '/settings', icon: SettingsIcon },
     ...(isAdmin ? [{ name: 'Utilisateurs', href: '/users', icon: ShieldCheck }] : []),
-  ];
+  ].filter((item) => canOpen(userRole, item.href));
 
   return (
     <div className="lg-app min-h-screen" data-liquid-layout>
@@ -99,7 +104,7 @@ export default function LiquidLayout() {
                   <span className="lg-avatar h-9 w-9 text-xs">{userInitials}</span>
                   <span className="hidden sm:block text-left max-w-[10rem]">
                     <span className="block text-xs font-semibold text-slate-700 truncate">{userEmail}</span>
-                    <span className="block text-[11px] text-slate-400">{isAdmin ? 'Administrateur' : 'Staff'}</span>
+                    <span className="block text-[11px] text-slate-400">{role.label}</span>
                   </span>
                   <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${profileOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                 </button>
@@ -109,7 +114,7 @@ export default function LiquidLayout() {
                     <div className="px-3 py-2.5">
                       <p className="text-sm font-semibold text-slate-800 truncate">{userEmail}</p>
                       <span className={`lg-badge mt-1 ${isAdmin ? 'lg-badge-accent' : ''}`}>
-                        {isAdmin ? 'Administrateur' : 'Staff'}
+                        {role.label}
                       </span>
                     </div>
                     <div className="lg-hairline" />
@@ -121,9 +126,11 @@ export default function LiquidLayout() {
                     >
                       <KeyRound className="w-4 h-4" aria-hidden="true" /> Changer mon mot de passe
                     </button>
-                    <Link to="/settings" role="menuitem" onClick={() => setProfileOpen(false)} className="lg-nav-link w-full">
-                      <SettingsIcon className="w-4 h-4" aria-hidden="true" /> Paramètres
-                    </Link>
+                    {canOpen(userRole, '/settings') && (
+                      <Link to="/settings" role="menuitem" onClick={() => setProfileOpen(false)} className="lg-nav-link w-full">
+                        <SettingsIcon className="w-4 h-4" aria-hidden="true" /> Paramètres
+                      </Link>
+                    )}
                     <button
                       type="button"
                       role="menuitem"
@@ -144,7 +151,7 @@ export default function LiquidLayout() {
         </div>
       </div>
 
-      <BottomNav pathname={location.pathname} onOpenMore={() => setMoreOpen(true)} />
+      <BottomNav role={userRole} pathname={location.pathname} onOpenMore={() => setMoreOpen(true)} />
 
       {/* Feuille « Plus » (mobile) */}
       <GlassModal open={moreOpen} onClose={() => setMoreOpen(false)} title="Plus" description="Toutes les sections" size="sm">

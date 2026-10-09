@@ -5,6 +5,7 @@ import { authFetch, safeJson, apiErrorMessage } from '../utils/api';
 import { toast } from '../utils/toast';
 import { useSchoolRefs } from '../components/school/useSchoolRefs';
 import { useTeachers } from '../components/school/useTeachers';
+import { currentRole } from '../utils/roles';
 import SelectField from '../components/school/SelectField';
 import Sheet from '../components/mobile/Sheet';
 import {
@@ -49,6 +50,8 @@ const COLORS = [
 export default function Timetable() {
   const { classes, subjects, loaded } = useSchoolRefs();
   const teachers = useTeachers();
+  // A Prof account reads the timetable of their classes; it cannot change it.
+  const readOnly = currentRole() === 'TEACHER';
   const [mode, setMode] = useState<Mode>('class');
   const [classId, setClassId] = useState('');
   const [teacherId, setTeacherId] = useState('');
@@ -170,7 +173,7 @@ export default function Timetable() {
   };
 
   const title = mode === 'class' ? `Classe : ${className}` : `Professeur : ${personName(teacher)}`;
-  const canAdd = mode === 'class' ? !!classId : !!teacherId && classes.length > 0;
+  const canAdd = !readOnly && (mode === 'class' ? !!classId : !!teacherId && classes.length > 0);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 mobile:space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -190,7 +193,7 @@ export default function Timetable() {
 
       {/* Controls */}
       <div className="no-print bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mobile:p-4 space-y-4">
-        <div className="inline-flex rounded-xl bg-slate-100 p-1 mobile:flex mobile:w-full" role="tablist">
+        <div className={`inline-flex rounded-xl bg-slate-100 p-1 mobile:flex mobile:w-full ${readOnly ? 'hidden' : ''}`} role="tablist">
           {([
             ['class', 'Par classe', BookOpen],
             ['teacher', 'Par professeur', GraduationCap],
@@ -270,8 +273,9 @@ export default function Timetable() {
                       {d.slots.map((s) => (
                         <button
                           key={s.id}
-                          onClick={() => openEdit(s)}
-                          className={`w-full text-left rounded-xl border p-3 hover:ring-2 hover:ring-primary/40 transition-shadow break-inside-avoid ${colors.get(activityName(s))}`}
+                          onClick={() => !readOnly && openEdit(s)}
+                          disabled={readOnly}
+                          className={`w-full text-left rounded-xl border p-3 transition-shadow break-inside-avoid disabled:cursor-default ${readOnly ? '' : 'hover:ring-2 hover:ring-primary/40'} ${colors.get(activityName(s))}`}
                         >
                           <p className="text-xs font-semibold text-slate-600 flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5" /> {timeRange(s.startTime, s.endTime)}

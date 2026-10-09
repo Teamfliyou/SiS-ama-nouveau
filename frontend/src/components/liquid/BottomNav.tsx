@@ -1,19 +1,21 @@
 import { Link } from 'react-router-dom';
 import { MoreHorizontal } from 'lucide-react';
-import { MOBILE_PRIMARY } from './navigation';
+import { mobilePrimaryFor } from './navigation';
 
 type Props = {
+  role: string;
   pathname: string;
   onOpenMore: () => void;
 };
 
 /** Barre de navigation basse type application mobile, flottante et translucide. */
-export default function BottomNav({ pathname, onOpenMore }: Props) {
-  const isPrimary = MOBILE_PRIMARY.some((item) => item.href === pathname);
+export default function BottomNav({ role, pathname, onOpenMore }: Props) {
+  const items = mobilePrimaryFor(role);
+  const isPrimary = items.some((item) => item.href === pathname);
 
   return (
     <nav className="lg-bottom-nav lg:hidden" aria-label="Navigation mobile">
-      {MOBILE_PRIMARY.map((item) => {
+      {items.map((item) => {
         const active = pathname === item.href;
         return (
           <Link

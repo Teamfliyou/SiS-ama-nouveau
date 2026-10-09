@@ -45,9 +45,47 @@ model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   password  String
-  role      UserRole @default(STAFF)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  role          UserRole       @default(STAFF) // ADMIN, STAFF (vie scolaire), TEACHER (prof)
+  // Teacher record of a TEACHER account: gives access to the classes they teach.
+  teacherId     Int?           @unique
+  teacher       Teacher?       @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  announcements Announcement[]
+  documents     Document[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+// ─── Messagerie et documents ─────────────────────────────────────────
+// Published by administrators; read by the whole team for now, by the
+// families later (family space).
+
+// Information posted by the administration (Messagerie).
+model Announcement {
+  id          Int      @id @default(autoincrement())
+  title       String
+  body        String
+  pinned      Boolean  @default(false) // shown first
+  createdById Int?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Important document (règlement intérieur, informations...). The file is
+// stored in the database so it survives redeployments and database backups.
+model Document {
+  id           Int      @id @default(autoincrement())
+  title        String
+  description  String?
+  category     String   @default("INFORMATION") // REGLEMENT, INFORMATION, AUTRE
+  fileName     String
+  mimeType     String
+  size         Int // bytes
+  data         Bytes
+  uploadedById Int?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Class {
@@ -82,6 +120,9 @@ model Student {
   photoOptOut Boolean @default(false)
   canLeaveAlone Boolean @default(false)
   guardians Guardian[]
+  quranLevel Int @default(1) // Quran programme level (1 to 11), see lib/quran.ts
+  quranPath String @default("BOTTOM_UP") // Dar Al Coran learning path, see lib/quran.ts
+  rubLevels RubAssessment[]
   preRegistrationChildren PreRegistrationChild[]
   id          Int          @id @default(autoincrement())
   firstName   String
@@ -157,6 +198,7 @@ model Teacher {
   classId        Int?
   class          Class?         @relation(fields: [classId], references: [id])
   teacherClasses TeacherClass[]
+  user           User? // the teacher's account, if any
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -177,6 +219,9 @@ model TeacherClass {
 model Attendance {
   id        Int              @id @default(autoincrement())
   date      DateTime         @db.Date
+  // Half-day of the roll call: AM (courses starting before 13:00) or PM.
+  // DAY marks the roll calls taken per day before half-days existed.
+  period    String           @default("DAY")
   studentId Int
   classId   Int
   status    AttendanceStatus @default(PRESENT)
@@ -185,7 +230,7 @@ model Attendance {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  @@unique([date, studentId])
+  @@unique([date, period, studentId])
   @@index([classId, date])
 }
 
@@ -243,6 +288,7 @@ model Term {
   endDate       String // "YYYY-MM-DD"
   evaluations   Evaluation[]
   surahLevels   SurahAssessment[]
+  rubLevels     RubAssessment[]
   reportRemarks ReportRemark[]
   createdAt     DateTime          @default(now())
 }
@@ -290,6 +336,21 @@ model SurahAssessment {
   term        Term    @relation(fields: [termId], references: [id], onDelete: Restrict)
 
   @@unique([studentId, termId, surahNumber])
+}
+
+// Dar Al Coran (levels 5 to 11): competency level reached on one rob' (quarter)
+// of a hizb (1 to 56) for a term. A hizb is acquired once its 4 rob' are.
+model RubAssessment {
+  id        Int     @id @default(autoincrement())
+  hizb      Int // 1 to 56
+  quarter   Int // 1 to 4
+  level     String // NOT_ACQUIRED, IN_PROGRESS, ACQUIRED, MASTERED
+  studentId Int
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId    Int
+  term      Term    @relation(fields: [termId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, termId, hizb, quarter])
 }
 
 // General appreciation written on a student's report card for a term.

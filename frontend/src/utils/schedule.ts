@@ -128,6 +128,35 @@ export function nextSessionDate(slots: (Activity & { dayOfWeek: number })[], dat
   return '';
 }
 
+// ─── Roll call per half-day ──────────────────────────────────────────
+// One roll call per class and half-day: the morning groups the courses starting
+// before 13:00, the afternoon the others (same rule as the server).
+
+export type HalfDay = 'AM' | 'PM';
+export const HALF_DAY_LABELS: Record<string, string> = { AM: 'Matin', PM: 'Après-midi', DAY: 'Journée' };
+
+export const halfDayOf = (startTime: string): HalfDay => (startTime < '13:00' ? 'AM' : 'PM');
+
+/** Half-days of a date that have at least one course, in day order. */
+export function halfDaysOn<T extends { dayOfWeek: number; startTime: string }>(slots: T[], date: string) {
+  const day = isoDayOfWeek(date);
+  const ofDay = slots.filter((s) => s.dayOfWeek === day).sort((a, b) => a.startTime.localeCompare(b.startTime));
+  return (['AM', 'PM'] as const)
+    .map((period) => ({ period, slots: ofDay.filter((s) => halfDayOf(s.startTime) === period) }))
+    .filter((h) => h.slots.length > 0);
+}
+
+/** The next `count` half-days with courses, from `from` included (looks one year ahead at most). */
+export function upcomingHalfDays<T extends { dayOfWeek: number; startTime: string }>(slots: T[], from: string, count: number) {
+  const result: { date: string; period: HalfDay; slots: T[] }[] = [];
+  if (!from || slots.length === 0) return result;
+  for (let i = 0; i < 366 && result.length < count; i++) {
+    const date = addDays(from, i);
+    for (const h of halfDaysOn(slots, date)) if (result.length < count) result.push({ date, ...h });
+  }
+  return result;
+}
+
 /** "2026-10-10" -> "samedi 10 octobre 2026" (or "samedi 10 octobre"). */
 export const formatLongDate = (date: string, withYear = true) =>
   toUtc(date).toLocaleDateString('fr-FR', {

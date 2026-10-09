@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireStaff } from '../middleware/auth';
 import { asyncHandler } from '../lib/errors';
 import { centsToEuros } from '../lib/money';
 
 const router = Router();
 
 router.use(authenticate);
+// Dashboard statistics (they include finances): administration and vie scolaire only (not teachers).
+router.use(requireStaff);
 
 // GET /api/stats
 router.get(

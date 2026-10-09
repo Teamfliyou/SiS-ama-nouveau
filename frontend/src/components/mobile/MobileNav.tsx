@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Grid2x2, KeyRound, LogOut, ChevronRight } from 'lucide-react';
 import Sheet from './Sheet';
-import { TAB_ITEMS, type NavItem } from './nav';
+import type { NavItem, TabItem } from './nav';
 
 export function MobileHeader({ title, initials, onAccount }: { title: string; initials: string; onAccount: () => void }) {
   return (
@@ -24,7 +24,7 @@ export function MobileHeader({ title, initials, onAccount }: { title: string; in
   );
 }
 
-export function MobileTabBar({ pathname, moreActive, onMore }: { pathname: string; moreActive: boolean; onMore: () => void }) {
+export function MobileTabBar({ items, pathname, moreActive, onMore }: { items: TabItem[]; pathname: string; moreActive: boolean; onMore: () => void }) {
   const itemCls = (active: boolean) =>
     `flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-[11px] font-semibold transition-colors ${active ? 'text-primary' : 'text-slate-500'}`;
   const pillCls = (active: boolean) =>
@@ -36,7 +36,7 @@ export function MobileTabBar({ pathname, moreActive, onMore }: { pathname: strin
       className="no-print hidden mobile:block fixed z-30 left-3 right-3 bottom-[max(8px,var(--safe-bottom))] glass-bar rounded-[22px]"
     >
       <ul className="grid grid-cols-5 h-[var(--m-tabbar-h)] px-1">
-        {TAB_ITEMS.map(item => {
+        {items.map(item => {
           const active = pathname === item.href;
           return (
             <li key={item.href} className="flex">
@@ -65,13 +65,13 @@ type MoreSheetProps = {
   pathname: string;
   email: string;
   initials: string;
-  isAdmin: boolean;
+  roleLabel: string;
   onPassword: () => void;
   onLogout: () => void;
 };
 
 /** Menu « Plus » : sections secondaires + compte, en bottom sheet. */
-export function MoreSheet({ open, onClose, items, pathname, email, initials, isAdmin, onPassword, onLogout }: MoreSheetProps) {
+export function MoreSheet({ open, onClose, items, pathname, email, initials, roleLabel, onPassword, onLogout }: MoreSheetProps) {
   const rowCls = 'w-full flex items-center gap-3 px-4 min-h-[52px] text-[15px] font-medium text-slate-800 active:bg-slate-50';
 
   return (
@@ -84,7 +84,7 @@ export function MoreSheet({ open, onClose, items, pathname, email, initials, isA
           </span>
           <div className="min-w-0">
             <p className="text-[15px] font-semibold text-slate-900 truncate">{email}</p>
-            <p className="text-[13px] text-slate-500">{isAdmin ? 'Administrateur' : 'Staff'}</p>
+            <p className="text-[13px] text-slate-500">{roleLabel}</p>
           </div>
         </div>
 

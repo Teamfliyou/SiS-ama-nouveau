@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, expect } from 'vitest';
-import { req, resetDb, adminToken, auth, createUser, uniqueEmail, tokenFor } from './helpers';
+import { req, resetDb, adminToken, auth, createUser, uniqueEmail, tokenFor, morningCourseEveryDay } from './helpers';
 
 const RESET_CONFIRMATION = 'SUPPRIMER TOUTES LES DONNÉES';
 
@@ -16,10 +16,11 @@ async function seedBusinessData(token: string): Promise<{ classId: number; stude
     await req.post('/api/students').set(auth(token)).send({ firstName: 'Zoe', lastName: 'Adam', classId: cls.id })
   ).body;
   await req.post('/api/finances').set(auth(token)).send({ amount: 60, studentId: stu.id });
+  await morningCourseEveryDay(token, cls.id);
   await req
     .post('/api/attendance')
     .set(auth(token))
-    .send({ date: '2026-09-09', records: [{ studentId: stu.id, status: 'PRESENT' }] });
+    .send({ date: '2026-09-09', period: 'AM', records: [{ studentId: stu.id, status: 'PRESENT' }] });
   return { classId: cls.id, studentId: stu.id };
 }
 
