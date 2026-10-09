@@ -1,3 +1,4 @@
+import { assertTestDatabaseUrl } from '../lib/testDatabase';
 import request from 'supertest';
 import bcrypt from 'bcrypt';
 import { createApp } from '../lib/app';
@@ -64,8 +65,11 @@ export async function morningCourseEveryDay(token: string, classId: number) {
 
 /** Empties all tables (FK-safe order). Called before each test. */
 export async function resetDb() {
+  assertTestDatabaseUrl(process.env.DATABASE_URL ?? '');
   await prisma.announcement.deleteMany();
   await prisma.document.deleteMany();
+  await prisma.teacherClass.deleteMany();
+  await prisma.enrollment.deleteMany();
   await prisma.preRegistration.deleteMany();
   await prisma.guardian.deleteMany();
   await prisma.registrationSettings.deleteMany();
@@ -83,6 +87,8 @@ export async function resetDb() {
   await prisma.paymentGroup.deleteMany();
   await prisma.teacher.deleteMany();
   await prisma.student.deleteMany();
+  await prisma.family.deleteMany();
   await prisma.class.deleteMany();
+  await prisma.schoolYear.deleteMany();
   await prisma.user.deleteMany();
 }

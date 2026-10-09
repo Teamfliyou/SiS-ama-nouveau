@@ -1,0 +1,76 @@
+name: Integration validation
+on:
+  pull_request:
+    branches: [feat/deploy-docker]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sisama_test
+          POSTGRES_PASSWORD: integration_test_only
+          POSTGRES_DB: sisama_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U sisama_test -d sisama_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sisama_test:integration_test_only@localhost:5432/sisama_test?schema=public
+      TEST_DATABASE_URL: postgresql://sisama_test:integration_test_only@localhost:5432/sisama_test?schema=public
+      PGPASSWORD: integration_test_only
+      PGUSER: sisama_test
+      PGHOST: localhost
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npx --no-install prisma validate
+      - run: npm run build
+      - run: npm test
+      - name: Check schema matches all applied migrations
+        run: npx --no-install prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+      - name: Upgrade production schema using synthetic data only
+        env:
+          PRODUCTION_BASE_SHA: 7e86c00c9c97bed71c591f0dbcf69e98744b2ecc
+        run: bash scripts/check-upgrade.sh
+      - name: Verify backup script on synthetic data only
+        run: |
+          createdb sisama_backup_verify
+          export SOURCE_DATABASE_URL="postgresql://${PGUSER}:${PGPASSWORD}@localhost:5432/sisama_upgrade_test"
+          export VERIFY_DATABASE_URL="postgresql://${PGUSER}:${PGPASSWORD}@localhost:5432/sisama_backup_verify"
+          export BACKUP_FILE="$RUNNER_TEMP/synthetic-backup.dump"
+          bash scripts/verified-backup.sh
+          test "$(psql "$VERIFY_DATABASE_URL" -At -c 'SELECT count(*) FROM "Student";')" = 1
+          test "$(psql "$VERIFY_DATABASE_URL" -At -c 'SELECT sum("amountCents") FROM "Payment";')" = 13500

@@ -57,9 +57,16 @@ describe('Messagerie (announcements)', () => {
 
     // Information is kept in the JSON backup and not duplicated on restore.
     const backup = (await req.get('/api/export').set(auth(admin))).body;
-    expect(backup.announcements).toHaveLength(2);
+    expect(backup.data.announcements).toHaveLength(2);
     expect((await req.post('/api/import/full').set(auth(admin)).send(backup)).status).toBe(200);
     expect((await req.get('/api/announcements').set(auth(staff))).body).toHaveLength(2);
+    // ...and restored once removed.
+    for (const a of (await req.get('/api/announcements').set(auth(admin))).body as { id: number }[]) {
+      await req.delete(`/api/announcements/${a.id}`).set(auth(admin));
+    }
+    expect((await req.post('/api/import/full').set(auth(admin)).send(backup)).status).toBe(200);
+    const restored = (await req.get('/api/announcements').set(auth(staff))).body as { title: string }[];
+    expect(restored.map((a) => a.title).sort()).toEqual(['Rentrée 2026', 'Sortie']);
   });
 });
 

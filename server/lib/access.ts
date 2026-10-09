@@ -1,7 +1,7 @@
 // What the current account may see. Administration and vie scolaire see every
 // class; a teacher (« Prof ») only the classes they teach: the class they are in
-// charge of (Teacher.classId) and the classes where they have a course in the
-// timetable.
+// charge of (Teacher.classId), the classes assigned to them (TeacherClass) and
+// the classes where they have a course in the timetable.
 import type { Request } from 'express';
 import { prisma } from './prisma';
 import { AppError } from './errors';
@@ -16,11 +16,12 @@ export async function allowedClassIds(req: Request): Promise<Set<number> | null>
   const teacherId = req.user?.teacherId;
   if (!teacherId) return new Set();
   const [teacher, slots] = await Promise.all([
-    prisma.teacher.findUnique({ where: { id: teacherId }, select: { classId: true } }),
+    prisma.teacher.findUnique({ where: { id: teacherId }, select: { classId: true, teacherClasses: { select: { classId: true } } } }),
     prisma.timetableSlot.findMany({ where: { teacherId }, select: { classId: true }, distinct: ['classId'] }),
   ]);
   const ids = new Set(slots.map((s) => s.classId));
   if (teacher?.classId) ids.add(teacher.classId);
+  for (const tc of teacher?.teacherClasses ?? []) ids.add(tc.classId);
   return ids;
 }
 

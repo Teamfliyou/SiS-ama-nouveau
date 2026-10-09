@@ -355,7 +355,7 @@ describe('Dar Al Coran (hizb map)', () => {
     expect((await req.delete(`/api/terms/${ctx.termId}`).set(auth(ctx.token))).status).toBe(409);
 
     const backup = (await req.get('/api/export').set(auth(ctx.token))).body;
-    expect(backup.rubAssessments).toHaveLength(4);
+    expect(backup.data.rubAssessments).toHaveLength(4);
     await resetDb();
     const token = await adminToken();
     expect((await req.post('/api/import/full').set(auth(token)).send(backup)).status).toBe(200);
@@ -429,7 +429,7 @@ describe('report cards', () => {
       classMin: 10,
       classMax: 18,
     });
-    expect(ra.attendance).toEqual({ present: 0, absent: 1, late: 0 });
+    expect(ra.attendance).toEqual({ present: 0, absent: 1, late: 0, excused: 0 });
     expect(ra.quran).toMatchObject({ level: 1, summary: { memorized: 1 } });
     expect(ra.quran.surahs).toHaveLength(17);
     expect(ra.quran.progress[0]).toMatchObject({ level: 1, memorized: 1, total: 17, complete: false });

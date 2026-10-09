@@ -15,6 +15,9 @@ import importCsvRoutes from '../routes/importCsv';
 import dataRoutes from '../routes/data';
 import statsRoutes from '../routes/stats';
 import setupRoutes from '../routes/setup';
+import schoolYearRoutes from '../routes/schoolYears';
+import familyRoutes from '../routes/families';
+import healthRoutes from '../routes/health';
 import subjectRoutes from '../routes/subjects';
 import termRoutes from '../routes/terms';
 import evaluationRoutes from '../routes/evaluations';
@@ -26,6 +29,7 @@ import publicRegistrationRoutes from '../routes/publicRegistration';
 import preRegistrationRoutes from '../routes/preRegistrations';
 import announcementRoutes from '../routes/announcements';
 import documentRoutes from '../routes/documents';
+import invitationRoutes from '../routes/invitations';
 import { getJwtSecret } from './secret';
 
 /** Fails fast on a missing/weak JWT secret. Never rely on a default value. */
@@ -69,9 +73,12 @@ export function createApp(): Express {
 
   // ─── API routes ───────────────────────────────────────────────────
   // Public bootstrap must be mounted early.
+  app.use('/api/health', healthRoutes);
   app.use('/api/setup', setupRoutes);
   // Online pre-registration form used by families (no account).
   app.use('/api/public/registration', publicRegistrationRoutes);
+  // Invitation links (teacher accounts): the person chooses their password (no account yet).
+  app.use('/api/invitations', invitationRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/classes', classRoutes);
@@ -92,6 +99,8 @@ export function createApp(): Express {
   app.use('/api/import-csv', importCsvRoutes);
   app.use('/api', dataRoutes); // /api/export, /api/import/full
   app.use('/api/stats', statsRoutes);
+  app.use('/api/school-years', schoolYearRoutes);
+  app.use('/api/families', familyRoutes);
 
   // Unknown API routes return JSON, not HTML error pages.
   app.use('/api', (_req: Request, res: Response) => {

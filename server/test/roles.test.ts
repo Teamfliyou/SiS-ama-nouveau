@@ -2,6 +2,8 @@ import { describe, it, beforeEach, expect } from 'vitest';
 import { req, resetDb, adminToken, auth, createUser, uniqueEmail, tokenFor, TEST_PASSWORD } from './helpers';
 
 /**
+ * Teacher records without email: their Prof accounts are linked by hand here
+ * (a record with an email gets its account automatically, see invitations.test.ts).
  * Two classes. Karim is in charge of class A and also teaches a course to class B
  * in the timetable; class C is not his. One student per class.
  */
@@ -18,9 +20,9 @@ async function setup() {
   const students = { a: await student('Amine', a), b: await student('Bilal', b), c: await student('Chaima', c) };
 
   const karim = (
-    await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Karim', lastName: 'H', email: uniqueEmail('karim'), classId: a })
+    await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Karim', lastName: 'H', classId: a })
   ).body;
-  const other = (await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Nadia', lastName: 'B', email: uniqueEmail('nadia') })).body;
+  const other = (await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Nadia', lastName: 'B' })).body;
   const slot = await req
     .post('/api/timetable')
     .set(auth(admin))
@@ -162,6 +164,18 @@ describe('Prof: only the classes they teach', () => {
     expect((await req.get(`/api/report-cards?classId=${a}&termId=${ctx.termId}`).set(p)).status).toBe(200);
     expect((await req.get(`/api/report-cards?classId=${c}&termId=${ctx.termId}`).set(p)).status).toBe(403);
     expect((await req.put('/api/report-cards/remark').set(p).send({ studentId: ctx.students.c, termId: ctx.termId, comment: 'X' })).status).toBe(403);
+  });
+
+  it('also sees the classes assigned to the teacher (several classes per teacher)', async () => {
+    const ctx = await setup();
+    const assigned = await req
+      .put(`/api/teachers/${ctx.karim.id}`)
+      .set(auth(ctx.admin))
+      .send({ firstName: 'Karim', lastName: 'H', classIds: [ctx.classes.a, ctx.classes.c] });
+    expect(assigned.status).toBe(200);
+    const classes = (await req.get('/api/classes').set(auth(ctx.prof))).body as { id: number }[];
+    expect(classes.map((c) => c.id)).toContain(ctx.classes.c);
+    expect((await req.get(`/api/attendance/history?classId=${ctx.classes.c}`).set(auth(ctx.prof))).status).toBe(200);
   });
 
   it('sees nothing when the account has lost its teacher record', async () => {

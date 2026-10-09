@@ -1,11 +1,20 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { asyncHandler } from '../lib/errors';
 import { validate, isRealDateString, timeSchema } from '../lib/validate';
 import { normalizeKey, studentKey } from '../lib/dedupe';
+import { classKey } from '../lib/classes';
+import { getActiveSchoolYearId, setActiveSchoolYear } from '../lib/schoolYears';
 import { eurosToCents } from '../lib/money';
+import { toEnumMethod, toLabelMethod } from '../lib/paymentMethods';
+import { ymdToDate, toYmd } from '../lib/dates';
+import {
+  CURRENT_BACKUP_FORMAT_VERSION,
+  normalizeBackupInput,
+  buildBackupFilename,
+} from '../lib/backup';
 import { COMPETENCY_LEVELS, SURAH_NUMBERS, MAX_QURAN_LEVEL, MAP_HIZBS, QURAN_PATH_CODES } from '../lib/quran';
 
 const router = Router();
@@ -40,20 +49,49 @@ const euroNumber = z
   .optional();
 const centsNumber = z.number().int().nonnegative().max(MAX_CENTS).optional();
 
-// Accepts either a bare "YYYY-MM-DD" date or a full ISO datetime (what our own
-// v2 export emits), but rejects non-existing days such as 2026-02-31.
+// Accepts either a bare "YYYY-MM-DD" date or a full ISO datetime (what our
+// v2/v3 exports may emit), but rejects non-existing days such as 2026-02-31.
 const isParsableDateString = (value: string): boolean =>
   isRealDateString(value.slice(0, 10)) && !Number.isNaN(Date.parse(value));
 
-const paymentDateSchema = z.string().max(40).optional().refine(
+const dateLikeSchema = z.string().max(40).optional().refine(
   (v) => v === undefined || isParsableDateString(v),
   { message: 'Date invalide' }
 );
 
-const attendanceDateSchema = z
+const paymentDateSchema = dateLikeSchema;
+
+/** Dates d'inscription : YYYY-MM-DD, ISO datetime, null ou absent. */
+const nullableDateLikeSchema = z
   .string()
   .max(40)
-  .refine((v) => isRealDateString(v), { message: 'Date invalide (attendu YYYY-MM-DD)' });
+  .nullable()
+  .optional()
+  .refine((v) => v === null || v === undefined || isParsableDateString(v), { message: 'Date invalide' })
+  .transform((v) => (v === null || v === undefined ? null : v));
+
+const schoolYearDateSchema = z
+  .string()
+  .max(40)
+  .refine((v) => isParsableDateString(v), { message: 'Date invalide (attendu YYYY-MM-DD)' });
+
+const studentRefSchema = z.object({ id: z.number().int() }).optional();
+
+/** Jour calendaire strict « YYYY-MM-DD » (matières, périodes, évaluations). */
+const ymdSchema = z
+  .string()
+  .max(10)
+  .refine((v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && isRealDateString(v), { message: 'Date invalide (attendu YYYY-MM-DD)' });
+
+/** Référence de classe par nom (+ année scolaire facultative pour lever l'ambiguïté). */
+const classRefSchema = z.object({
+  name: z.string(),
+  schoolYear: z.object({ name: z.string() }).nullable().optional(),
+});
+
+/** Les familles sont identifiées par email quand il existe, sinon nom+téléphone. */
+const familyKeyOf = (f: { name?: string | null; phone?: string | null; email?: string | null }): string =>
+  f.email ? normalizeKey(f.email) : `${normalizeKey(f.name ?? '')}|${normalizeKey(f.phone ?? '')}`;
 
 const nullableText = (max: number) =>
   z
@@ -94,6 +132,41 @@ const importPayloadSchema = z.object({
         openForRegistration: z.boolean().optional(),
         scheduleLabel: nullableText(80),
         capacity: z.number().int().min(1).max(500).nullable().optional(),
+        schoolYear: z
+          .object({ id: z.number().int().optional(), name: z.string().trim().min(1).max(120) })
+          .nullable()
+          .optional(),
+        schoolYearId: z.number().int().nullable().optional(),
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
+  schoolYears: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(120),
+        startDate: schoolYearDateSchema,
+        endDate: schoolYearDateSchema,
+        active: z.boolean().optional().default(false),
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
+  families: z
+    .array(
+      z.object({
+        id: z.number().int().optional(),
+        name: optionalString.transform((v) => v || null),
+        phone: optionalPhone,
+        email: z
+          .string()
+          .trim()
+          .toLowerCase()
+          .max(320)
+          .nullable()
+          .optional()
+          .transform((v) => v || null),
+        address: optionalString.transform((v) => v || null),
       })
     )
     .max(MAX_ITEMS)
@@ -105,14 +178,33 @@ const importPayloadSchema = z.object({
         firstName: z.string().trim().min(1).max(120),
         lastName: z.string().trim().min(1).max(120),
         phone: optionalPhone,
-        birthDate: attendanceDateSchema.nullable().optional(),
+        dateOfBirth: nullableDateLikeSchema,
+        wasEnrolled2025_2026: z.boolean().nullable().optional(),
+        arabicCourse: nullableText(120),
+        quranCourse: nullableText(120),
+        birthDate: ymdSchema.nullable().optional(),
         gender: z.enum(['F', 'M']).nullable().optional(),
         medicalInfo: nullableText(1000),
         photoOptOut: z.boolean().optional(),
         canLeaveAlone: z.boolean().optional(),
+        class: classRefSchema.nullable().optional(),
+        family: z
+          .object({
+            name: optionalString.transform((v) => v || null),
+            phone: optionalPhone,
+            email: z
+              .string()
+              .trim()
+              .toLowerCase()
+              .max(320)
+              .nullable()
+              .optional()
+              .transform((v) => v || null),
+          })
+          .nullable()
+          .optional(),
         quranLevel: z.number().int().min(1).max(MAX_QURAN_LEVEL).optional(),
         quranPath: z.enum(QURAN_PATH_CODES).optional(),
-        class: z.object({ name: z.string() }).nullable().optional(),
       })
     )
     .max(MAX_ITEMS)
@@ -138,7 +230,7 @@ const importPayloadSchema = z.object({
             z.object({
               firstName: z.string().trim().min(1).max(120),
               lastName: z.string().trim().min(1).max(120),
-              birthDate: attendanceDateSchema,
+              birthDate: ymdSchema,
               gender: z.enum(['F', 'M']),
               firstEnrollment: z.boolean(),
               feeCents: z.number().int().nonnegative().max(MAX_CENTS),
@@ -146,7 +238,7 @@ const importPayloadSchema = z.object({
               medicalInfo: nullableText(1000),
               photoOptOut: z.boolean(),
               canLeaveAlone: z.boolean(),
-              class: z.object({ name: z.string() }).nullable().optional(),
+              class: classRefSchema.nullable().optional(),
               studentId: z.number().int().nullable().optional(),
             })
           )
@@ -161,7 +253,7 @@ const importPayloadSchema = z.object({
       isOpen: z.boolean(),
       schoolYear: z.string().trim().min(1).max(20),
       minAge: z.number().int().min(0).max(18),
-      ageReferenceDate: attendanceDateSchema,
+      ageReferenceDate: ymdSchema,
       contactEmail: nullableText(320),
       helloAssoUrl: nullableText(500),
       rulesText: z.string().trim().min(1).max(20_000),
@@ -183,7 +275,10 @@ const importPayloadSchema = z.object({
           .optional()
           .transform((v) => v || null),
         phone: optionalPhone,
-        class: z.object({ name: z.string() }).nullable().optional(),
+        class: classRefSchema.nullable().optional(),
+        classes: z
+          .array(z.object({ name: z.string().trim().min(1).max(120), subject: optionalString.transform((v) => v || null) }))
+          .optional(),
       })
     )
     .max(MAX_ITEMS)
@@ -193,12 +288,14 @@ const importPayloadSchema = z.object({
       z.object({
         studentId: z.number().int().optional(),
         method: optionalString.transform((v) => v || 'Espèces'),
+        reference: optionalString.transform((v) => v || null),
+        note: optionalString.transform((v) => v || null),
         amount: euroNumber,
         amountCents: centsNumber,
         discountCents: centsNumber,
         groupId: z.number().int().nullable().optional(),
         date: paymentDateSchema,
-        student: z.object({ id: z.number().int() }).optional(),
+        student: studentRefSchema,
       })
     )
     .max(MAX_ITEMS)
@@ -219,14 +316,32 @@ const importPayloadSchema = z.object({
   attendances: z
     .array(
       z.object({
-        date: attendanceDateSchema,
+        date: z
+          .string()
+          .max(40)
+          .refine((v) => isParsableDateString(v), { message: 'Date invalide (attendu YYYY-MM-DD)' }),
         // Backups older than half-day roll calls have no period: whole day.
         period: z.enum(['AM', 'PM', 'DAY']).default('DAY'),
         studentId: z.number().int().optional(),
         classId: z.number().int().optional(),
-        status: z.enum(['PRESENT', 'ABSENT', 'LATE']).default('PRESENT'),
-        student: z.object({ id: z.number().int() }).optional(),
+        status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']).default('PRESENT'),
+        student: studentRefSchema,
         class: z.object({ name: z.string() }).optional(),
+      })
+    )
+    .max(MAX_ITEMS)
+    .optional(),
+  enrollments: z
+    .array(
+      z.object({
+        studentId: z.number().int().optional(),
+        student: studentRefSchema,
+        class: z.object({ name: z.string() }).optional(),
+        classId: z.number().int().optional(),
+        schoolYear: z.object({ name: z.string() }).nullable().optional(),
+        isActive: z.boolean().optional().default(true),
+        startDate: nullableDateLikeSchema,
+        endDate: nullableDateLikeSchema,
       })
     )
     .max(MAX_ITEMS)
@@ -236,17 +351,17 @@ const importPayloadSchema = z.object({
     .max(MAX_ITEMS)
     .optional(),
   terms: z
-    .array(z.object({ name: z.string().trim().min(1).max(80), startDate: attendanceDateSchema, endDate: attendanceDateSchema }))
+    .array(z.object({ name: z.string().trim().min(1).max(80), startDate: ymdSchema, endDate: ymdSchema }))
     .max(MAX_ITEMS)
     .optional(),
   evaluations: z
     .array(
       z.object({
         title: z.string().trim().min(1).max(120),
-        date: attendanceDateSchema,
+        date: ymdSchema,
         maxScore: z.number().int().min(1).max(100).default(20),
         coefficient: z.number().int().min(1).max(20).default(1),
-        class: z.object({ name: z.string() }),
+        class: classRefSchema,
         subject: z.object({ name: z.string() }),
         term: z.object({ name: z.string() }),
         grades: z
@@ -316,7 +431,7 @@ const importPayloadSchema = z.object({
         endTime: timeSchema,
         label: nullableText(80),
         room: nullableText(40),
-        class: z.object({ name: z.string() }),
+        class: classRefSchema,
         subject: z.object({ name: z.string() }).nullable().optional(),
         teacher: teacherRefSchema,
       })
@@ -326,15 +441,15 @@ const importPayloadSchema = z.object({
   lessons: z
     .array(
       z.object({
-        date: attendanceDateSchema,
+        date: ymdSchema,
         startTime: timeSchema.nullable().optional(),
         endTime: timeSchema.nullable().optional(),
         label: nullableText(80),
         content: nullableText(5000),
         homework: nullableText(2000),
-        homeworkDueDate: attendanceDateSchema.nullable().optional(),
+        homeworkDueDate: ymdSchema.nullable().optional(),
         slotId: z.number().int().nullable().optional(),
-        class: z.object({ name: z.string() }),
+        class: classRefSchema,
         subject: z.object({ name: z.string() }).nullable().optional(),
         teacher: teacherRefSchema,
       })
@@ -343,9 +458,78 @@ const importPayloadSchema = z.object({
     .optional(),
 });
 
+/**
+ * Efface toutes les données métier (jamais les comptes utilisateurs), dans
+ * l'ordre FK-safe : enfants avant parents. Partagé par la réinitialisation et
+ * la restauration en mode `replace`.
+ */
+const deleteBusinessData = async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
+  const preRegistration = await tx.preRegistration.deleteMany();
+  const guardian = await tx.guardian.deleteMany();
+  const registrationSettings = await tx.registrationSettings.deleteMany();
+  const lesson = await tx.lesson.deleteMany();
+  const timetableSlot = await tx.timetableSlot.deleteMany();
+  const grade = await tx.grade.deleteMany();
+  const evaluation = await tx.evaluation.deleteMany();
+  const surahAssessment = await tx.surahAssessment.deleteMany();
+  const reportRemark = await tx.reportRemark.deleteMany();
+  const attendance = await tx.attendance.deleteMany();
+  const payment = await tx.payment.deleteMany();
+  const paymentGroup = await tx.paymentGroup.deleteMany();
+  const enrollment = await tx.enrollment.deleteMany();
+  const teacherClass = await tx.teacherClass.deleteMany();
+  const student = await tx.student.deleteMany();
+  const teacher = await tx.teacher.deleteMany();
+  const classes = await tx.class.deleteMany();
+  const family = await tx.family.deleteMany();
+  const schoolYear = await tx.schoolYear.deleteMany();
+  const subject = await tx.subject.deleteMany();
+  const term = await tx.term.deleteMany();
+  return {
+    preRegistrations: preRegistration.count,
+    guardians: guardian.count,
+    registrationSettings: registrationSettings.count,
+    lessons: lesson.count,
+    timetableSlots: timetableSlot.count,
+    attendances: attendance.count,
+    payments: payment.count,
+    paymentGroups: paymentGroup.count,
+    enrollments: enrollment.count,
+    teacherClasses: teacherClass.count,
+    students: student.count,
+    teachers: teacher.count,
+    classes: classes.count,
+    families: family.count,
+    schoolYears: schoolYear.count,
+    grades: grade.count,
+    evaluations: evaluation.count,
+    surahAssessments: surahAssessment.count,
+    reportRemarks: reportRemark.count,
+    subjects: subject.count,
+    terms: term.count,
+  };
+};
+
+/**
+ * Ramène toute sauvegarde (v1/v2/v3, avec ou sans enveloppe `data`) au format
+ * interne courant avant validation. Barrière de sécurité : seules les
+ * collections métier connues sont conservées.
+ */
+const normalizeBackup: RequestHandler = (req, _res, next) => {
+  req.body = normalizeBackupInput(req.body).payload;
+  next();
+};
+
+/** Corps attendu par la réinitialisation complète des données métier. */
+const RESET_CONFIRMATION = 'SUPPRIMER TOUTES LES DONNÉES';
+const resetSchema = z.object({
+  confirmation: z.string().refine((v) => v === RESET_CONFIRMATION, {
+    message: 'Confirmation invalide',
+  }),
+});
 // Names used to match the class, subject and teacher of a course or session on restore.
 const scheduleRefs = {
-  class: { select: { name: true } },
+  class: { select: { name: true, schoolYear: { select: { name: true } } } },
   subject: { select: { name: true } },
   teacher: { select: { firstName: true, lastName: true, email: true } },
 } as const;
@@ -361,8 +545,11 @@ router.get(
       students,
       teachers,
       payments,
-      paymentGroups,
       attendances,
+      schoolYears,
+      families,
+      enrollments,
+      paymentGroups,
       subjects,
       terms,
       evaluations,
@@ -376,26 +563,41 @@ router.get(
       registrationSettings,
       announcements,
     ] = await Promise.all([
-      prisma.class.findMany({ orderBy: { name: 'asc' } }),
-      prisma.student.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } }),
-      prisma.teacher.findMany({ include: { class: true }, orderBy: { lastName: 'asc' } }),
-      prisma.payment.findMany({ include: { student: true }, orderBy: { date: 'desc' } }),
-      prisma.paymentGroup.findMany({ orderBy: { date: 'desc' } }),
-      prisma.attendance.findMany({ include: { student: true, class: true }, orderBy: { date: 'desc' } }),
-      prisma.subject.findMany({ orderBy: { name: 'asc' } }),
-      prisma.term.findMany({ orderBy: { startDate: 'asc' } }),
-      prisma.evaluation.findMany({
-        include: {
-          class: { select: { name: true } },
-          subject: { select: { name: true } },
-          term: { select: { name: true } },
-          grades: true,
-        },
-        orderBy: { date: 'asc' },
-      }),
-      prisma.surahAssessment.findMany({ include: { term: { select: { name: true } } } }),
-      prisma.rubAssessment.findMany({ include: { term: { select: { name: true } } } }),
-      prisma.reportRemark.findMany({ include: { term: { select: { name: true } } } }),
+        prisma.class.findMany({
+          orderBy: { name: 'asc' },
+          include: { schoolYear: { select: { id: true, name: true } } },
+        }),
+        prisma.student.findMany({
+          include: { class: true, family: true },
+          orderBy: { lastName: 'asc' },
+        }),
+        prisma.teacher.findMany({
+          include: { class: true, teacherClasses: { include: { class: { select: { name: true } } } } },
+          orderBy: { lastName: 'asc' },
+        }),
+        prisma.payment.findMany({ include: { student: true }, orderBy: { date: 'desc' } }),
+        prisma.attendance.findMany({ include: { student: true, class: true }, orderBy: { date: 'desc' } }),
+        prisma.schoolYear.findMany({ orderBy: { startDate: 'desc' } }),
+        prisma.family.findMany({ orderBy: { name: 'asc' } }),
+        prisma.enrollment.findMany({
+          include: { class: { select: { name: true } }, schoolYear: { select: { name: true } } },
+          orderBy: { id: 'asc' },
+        }),
+        prisma.paymentGroup.findMany({ orderBy: { date: 'desc' } }),
+        prisma.subject.findMany({ orderBy: { name: 'asc' } }),
+        prisma.term.findMany({ orderBy: { startDate: 'asc' } }),
+        prisma.evaluation.findMany({
+          include: {
+            class: { select: { name: true, schoolYear: { select: { name: true } } } },
+            subject: { select: { name: true } },
+            term: { select: { name: true } },
+            grades: true,
+          },
+          orderBy: { date: 'asc' },
+        }),
+        prisma.surahAssessment.findMany({ include: { term: { select: { name: true } } } }),
+        prisma.rubAssessment.findMany({ include: { term: { select: { name: true } } } }),
+        prisma.reportRemark.findMany({ include: { term: { select: { name: true } } } }),
       prisma.timetableSlot.findMany({
         include: scheduleRefs,
         orderBy: [{ classId: 'asc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
@@ -404,7 +606,7 @@ router.get(
       prisma.guardian.findMany({ include: { students: { select: { id: true } } }, orderBy: { id: 'asc' } }),
       prisma.preRegistration.findMany({
         include: {
-          children: { include: { class: { select: { name: true } } }, orderBy: { id: 'asc' } },
+          children: { include: { class: { select: { name: true, schoolYear: { select: { name: true } } } } }, orderBy: { id: 'asc' } },
           guardians: { orderBy: { id: 'asc' } },
         },
         orderBy: { id: 'asc' },
@@ -414,20 +616,49 @@ router.get(
         select: { title: true, body: true, pinned: true, createdAt: true },
         orderBy: { createdAt: 'asc' },
       }),
-    ]);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="asso-ama-export-${new Date().toISOString().slice(0, 10)}.json"`
-    );
-    res.json({
-      exportDate: new Date().toISOString(),
-      version: '5',
-      classes,
-      students,
-      teachers,
-      payments,
-      paymentGroups,
-      attendances,
+      ]);
+
+    const data = {
+      classes: classes.map((c) => ({
+        ...c,
+        schoolYear: c.schoolYear ? { id: c.schoolYear.id, name: c.schoolYear.name } : null,
+      })),
+      schoolYears: schoolYears.map((y) => ({
+        id: y.id,
+        name: y.name,
+        startDate: toYmd(y.startDate),
+        endDate: toYmd(y.endDate),
+        active: y.active,
+      })),
+      families: families.map((f) => ({ id: f.id, name: f.name, phone: f.phone, email: f.email, address: f.address })),
+      students: students.map((s) => ({
+        ...s,
+        family: s.family
+          ? { name: s.family.name, phone: s.family.phone, email: s.family.email }
+          : null,
+        schoolYear: undefined,
+      })),
+      teachers: teachers.map((t) => ({
+        ...t,
+        teacherClasses: undefined,
+        classes: t.teacherClasses.map((tc) => ({ name: tc.class.name, subject: tc.subject })),
+      })),
+      // La méthode stockée est une clé d'enum ; on exporte le label français
+      // historique pour rester compatible avec les sauvegardes v2 et le frontend.
+      payments: payments.map((p) => ({ ...p, method: toLabelMethod(p.method) })),
+      // Les présences exportées utilisent le jour calendaire (YYYY-MM-DD),
+      // exactement au format accepté par l'import.
+      attendances: attendances.map((a) => ({ ...a, date: toYmd(a.date) })),
+      enrollments: enrollments.map((e) => ({
+        studentId: e.studentId,
+        classId: e.classId,
+        class: { name: e.class.name },
+        schoolYear: e.schoolYear ? { name: e.schoolYear.name } : null,
+        isActive: e.isActive,
+        startDate: e.startDate ? toYmd(e.startDate) : null,
+        endDate: e.endDate ? toYmd(e.endDate) : null,
+      })),
+      paymentGroups: paymentGroups.map((g) => ({ ...g, method: toLabelMethod(g.method) })),
       subjects,
       terms,
       evaluations,
@@ -441,6 +672,17 @@ router.get(
       registrationSettings,
       // Document files are not in this JSON backup: they stay in the database.
       announcements,
+    };
+    const now = new Date();
+    res.setHeader('Content-Disposition', `attachment; filename="${buildBackupFilename(now)}"`);
+    res.json({
+      // Format canonique v5 : métadonnées + enveloppe `data`.
+      application: 'SiS AMA',
+      backupFormatVersion: CURRENT_BACKUP_FORMAT_VERSION,
+      createdAt: now.toISOString(),
+      // Champ conservé pour les lecteurs/anciens scripts qui lisent `version`.
+      version: String(CURRENT_BACKUP_FORMAT_VERSION),
+      data,
     });
   })
 );
@@ -448,20 +690,26 @@ router.get(
 // POST /api/import/full — restores a backup (merge, no duplicate records).
 // The whole payload is validated before any write and the whole merge runs in a
 // single transaction: a failure never leaves the database partially updated.
+// Accepts v2 backups (no schoolYears/families/enrollments/teacher classes) as
+// well as v3 ones produced by this server.
 router.post(
   '/import/full',
   authenticate,
   requireAdmin,
+  normalizeBackup,
   validate(importPayloadSchema),
   asyncHandler(async (req, res) => {
     const payload = req.body as z.infer<typeof importPayloadSchema>;
     const {
       classes = [],
+      schoolYears = [],
+      families = [],
       students = [],
       teachers = [],
       payments = [],
-      paymentGroups = [],
       attendances = [],
+      enrollments = [],
+      paymentGroups = [],
       subjects = [],
       terms = [],
       evaluations = [],
@@ -476,56 +724,258 @@ router.post(
       announcements = [],
     } = payload;
 
+    // `?mode=replace` : supprime d'abord les données métier (jamais les comptes
+    // utilisateurs) dans la MÊME transaction, puis restaure la sauvegarde.
+    // `?mode=merge` (défaut) : comportement d'import historique, sans doublon.
+    const replaceAll = req.query.mode === 'replace';
+
     const counts = await prisma.$transaction(async (tx) => {
+      // Les comptes User sont conservés.
+      if (replaceAll) await deleteBusinessData(tx);
+
       let classesCreated = 0;
+      let schoolYearsCreated = 0;
+      let familiesCreated = 0;
       let studentsCreated = 0;
       let teachersCreated = 0;
+      let teacherAssignments = 0;
       let paymentsCreated = 0;
       let attendancesCreated = 0;
+      let enrollmentsCreated = 0;
+      let enrollmentsSkipped = 0;
       let studentsSkipped = 0;
       let teachersSkipped = 0;
       let paymentsSkipped = 0;
 
-      const classMap = new Map<string, number>(); // normalized name -> id
-      const studentMap = new Map<number, number>(); // original id -> created/existing id
-      const studentsByKey = new Map<string, number>();
-      const teachersByKey = new Set<string>();
+      const yearMap = new Map<string, number>(); // normalized name -> id
+      const familyIdByKey = new Map<string, number>();
+      const studentIdByKey = new Map<string, number>();
+      const studentMap = new Map<number, number>(); // original payload id -> created/existing id
 
-      const existingClasses = await tx.class.findMany({ select: { id: true, name: true } });
-      const existingStudents = await tx.student.findMany({ select: { id: true, firstName: true, lastName: true } });
-      const existingTeachers = await tx.teacher.findMany({
-        select: { id: true, firstName: true, lastName: true, email: true },
-      });
-      // Payments must not be duplicated when the same backup is restored twice:
-      // before creating one we check for an existing identical payment on the
-      // same student (same cents, same date, same method), and we merge against
-      // payments already present in the database. Same sign of a className match,
-      // the teacher keys use the unique email when it exists and fall back to the
-      // full name otherwise — the same key function is used to seed the set from
-      // the existing teachers, so a re-import never hits a unique-constraint error.
-      const existingPayments = await tx.payment.findMany({
-        select: { studentId: true, amountCents: true, method: true, date: true },
-      });
+      const [existingClasses, existingYears, existingFamilies, existingStudents, existingTeachers, existingPayments] =
+        await Promise.all([
+          tx.class.findMany({ select: { id: true, name: true, schoolYearId: true } }),
+          tx.schoolYear.findMany({ select: { id: true, name: true, startDate: true } }),
+          tx.family.findMany({ select: { id: true, name: true, phone: true, email: true } }),
+          tx.student.findMany({ select: { id: true, firstName: true, lastName: true } }),
+          tx.teacher.findMany({ select: { id: true, firstName: true, lastName: true, email: true } }),
+          tx.payment.findMany({ select: { studentId: true, amountCents: true, method: true, date: true } }),
+        ]);
 
       const paymentKey = (studentId: number, amountCents: number, method: string | null, date: Date | string): string =>
-        `${studentId}|${amountCents}|${normalizeKey(method ?? 'Espèces')}|${
+        `${studentId}|${amountCents}|${normalizeKey(toLabelMethod(toEnumMethod(method)) ?? 'Espèces')}|${
           date instanceof Date ? date.getTime() : new Date(date).getTime()
         }`;
       const seenPayments = new Set(
         existingPayments.map((p) => paymentKey(p.studentId, p.amountCents, p.method, p.date))
       );
+      const seenYears = new Set<string>();
+      const seenFamilies = new Set<string>();
+      const seenTeachers = new Set<string>();
 
-      for (const c of existingClasses) classMap.set(normalizeKey(c.name), c.id);
-      for (const s of existingStudents) studentsByKey.set(studentKey(s.firstName, s.lastName), s.id);
-      for (const t of existingTeachers) teachersByKey.add(t.email ? normalizeKey(t.email) : studentKey(t.firstName, t.lastName));
+      for (const y of existingYears) {
+        yearMap.set(normalizeKey(y.name), y.id);
+        seenYears.add(normalizeKey(y.name));
+      }
+      for (const f of existingFamilies) {
+        familyIdByKey.set(familyKeyOf(f), f.id);
+        seenFamilies.add(familyKeyOf(f));
+      }
+      for (const s of existingStudents) studentIdByKey.set(studentKey(s.firstName, s.lastName), s.id);
+      for (const t of existingTeachers)
+        seenTeachers.add(t.email ? normalizeKey(t.email) : studentKey(t.firstName, t.lastName));
 
-      const seenClasses = new Set(classMap.keys());
-      const seenTeachers = new Set(teachersByKey);
+      // ── Années scolaires (cible de rattachement des classes) ──────────
+      const yearNameById = new Map<number, string>();
+      for (const y of existingYears) yearNameById.set(y.id, y.name);
 
-      // Grouped payments: a group is recreated lazily, the first time one of its
-      // lines is actually imported, so a re-import never duplicates groups.
+      for (const y of schoolYears) {
+        const key = normalizeKey(y.name);
+        if (seenYears.has(key)) continue;
+        // Toujours insérée inactive : l'activation passe par setActiveSchoolYear
+        // (index unique partiel → jamais deux années actives en même temps).
+        const created = await tx.schoolYear.create({
+          data: {
+            name: y.name,
+            startDate: ymdToDate(y.startDate!.slice(0, 10)),
+            endDate: ymdToDate(y.endDate!.slice(0, 10)),
+            active: false,
+          },
+        });
+        yearMap.set(key, created.id);
+        yearNameById.set(created.id, y.name);
+        seenYears.add(key);
+        schoolYearsCreated++;
+      }
+
+      // Règle déterministe : parmi les années du fichier marquées active, celle
+      // dont startDate est la plus récente devient l'unique année active ; toutes
+      // les autres (du fichier comme de la base) passent à inactive.
+      const activeCandidates = schoolYears
+        .filter((y) => y.active)
+        .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''));
+      if (activeCandidates.length > 0) {
+        const chosen = activeCandidates[activeCandidates.length - 1];
+        const id = yearMap.get(normalizeKey(chosen.name));
+        if (id) await setActiveSchoolYear(tx, id);
+      }
+      const activeYearId = await getActiveSchoolYearId(tx);
+
+      // ── Classes (identifiées par nom + année scolaire) ────────────────
+      // classByKey : (nom, année) -> id (déduplication + résolution précise).
+      // classesByName : nom -> [{ id, yearId }] (résolution par année active).
+      const classByKey = new Map<string, number>();
+      const classesByName = new Map<string, { id: number; yearId: number | null }[]>();
+      const payloadClassIdToNewId = new Map<number, number>();
+
+      const registerClass = (id: number, name: string, yearId: number | null, schoolYearName: string | null) => {
+        const refs = classesByName.get(normalizeKey(name)) ?? [];
+        refs.push({ id, yearId });
+        classesByName.set(normalizeKey(name), refs);
+        classByKey.set(classKey(name, schoolYearName), id);
+      };
+
+      const resolveClassByNameYear = (name: string, schoolYearName?: string | null): number | null =>
+        classByKey.get(classKey(name, schoolYearName ?? null)) ?? null;
+
+      const resolveClassByName = (name?: string | null): number | null => {
+        if (!name) return null;
+        const refs = classesByName.get(normalizeKey(name));
+        if (!refs || refs.length === 0) return null;
+        const active = refs.find((r) => r.yearId === activeYearId);
+        if (active) return active.id;
+        return refs.length === 1 ? refs[0].id : null;
+      };
+
+      for (const c of existingClasses) {
+        registerClass(
+          c.id,
+          c.name,
+          c.schoolYearId,
+          c.schoolYearId !== null ? (yearNameById.get(c.schoolYearId) ?? null) : null
+        );
+      }
+
+      for (const c of classes) {
+        const schoolYearName = c.schoolYear?.name ?? null;
+        const yearId = schoolYearName ? (yearMap.get(normalizeKey(schoolYearName)) ?? null) : null;
+        const key = classKey(c.name, schoolYearName);
+        const existingId = classByKey.get(key);
+        if (existingId !== undefined) {
+          if (c.id !== undefined) payloadClassIdToNewId.set(c.id, existingId);
+          continue;
+        }
+        const tuitionFeeCents = c.tuitionFeeCents ?? eurosToCents(c.tuitionFee ?? 0);
+        const created = await tx.class.create({
+          data: { name: c.name, tuitionFeeCents, schoolYearId: yearId, openForRegistration: c.openForRegistration, scheduleLabel: c.scheduleLabel, capacity: c.capacity },
+        });
+        registerClass(created.id, c.name, yearId, schoolYearName);
+        if (c.id !== undefined) payloadClassIdToNewId.set(c.id, created.id);
+        classesCreated++;
+      }
+
+      // ── Familles ──────────────────────────────────────────────────────
+      for (const f of families) {
+        const key = familyKeyOf(f);
+        const existingId = familyIdByKey.get(key);
+        if (existingId !== undefined) {
+          if (f.id !== undefined) familyIdByKey.set(key, existingId);
+          seenFamilies.add(key);
+          continue;
+        }
+        const created = await tx.family.create({
+          data: { name: f.name, phone: f.phone, email: f.email, address: f.address },
+        });
+        familyIdByKey.set(key, created.id);
+        seenFamilies.add(key);
+        familiesCreated++;
+      }
+
+      const resolveFamilyId = (f: { name?: string | null; phone?: string | null; email?: string | null }): number | null => {
+        const key = familyKeyOf(f);
+        return familyIdByKey.get(key) ?? null;
+      };
+
+      // ── Élèves ────────────────────────────────────────────────────────
+      for (const st of students) {
+        const key = studentKey(st.firstName, st.lastName);
+        const existingId = studentIdByKey.get(key);
+        let studentId: number;
+        if (existingId !== undefined) {
+          studentId = existingId;
+          studentsSkipped++;
+        } else {
+          const classId = st.class ? resolveClassByNameYear(st.class.name, st.class.schoolYear?.name) ?? resolveClassByName(st.class.name) : null;
+          const familyId = st.family ? resolveFamilyId(st.family) : null;
+          const created = await tx.student.create({
+            data: { firstName: st.firstName, lastName: st.lastName, phone: st.phone ?? null, classId, familyId,
+              dateOfBirth: st.dateOfBirth ? ymdToDate(st.dateOfBirth.slice(0, 10)) : st.birthDate ? ymdToDate(st.birthDate) : null,
+              birthDate: st.birthDate ?? st.dateOfBirth?.slice(0, 10) ?? null,
+              wasEnrolled2025_2026: st.wasEnrolled2025_2026, arabicCourse: st.arabicCourse, quranCourse: st.quranCourse,
+              gender: st.gender, medicalInfo: st.medicalInfo, photoOptOut: st.photoOptOut, canLeaveAlone: st.canLeaveAlone,
+              quranLevel: st.quranLevel ?? 1, quranPath: st.quranPath ?? 'BOTTOM_UP' },
+          });
+          studentId = created.id;
+          studentIdByKey.set(key, studentId);
+          studentsCreated++;
+        }
+        if (st.id !== undefined) studentMap.set(st.id, studentId);
+      }
+
+      // ── Professeurs (créés/se réutilisés, affectations restaurées) ────
+      for (const t of teachers) {
+        const email = t.email ?? null;
+        const key = email ? normalizeKey(email) : studentKey(t.firstName, t.lastName);
+        const teacherNames = new Set([
+          ...(t.class?.name ? [t.class.name] : []),
+          ...(t.classes ?? []).map((c) => c.name),
+        ]);
+        const subjectByName = new Map(
+          [...(t.classes ?? [])].map((c) => [normalizeKey(c.name), c.subject ?? t.subject ?? null])
+        );
+
+        let teacherId: number | null = null;
+        if (seenTeachers.has(key)) {
+          teachersSkipped++;
+          const existing = await tx.teacher.findFirst({
+            where: email ? { email } : { firstName: t.firstName, lastName: t.lastName },
+            select: { id: true },
+          });
+          teacherId = existing?.id ?? null;
+        } else {
+          const created = await tx.teacher.create({
+            data: {
+              firstName: t.firstName,
+              lastName: t.lastName,
+              subject: t.subject,
+              email,
+              phone: t.phone,
+            },
+          });
+          teacherId = created.id;
+          seenTeachers.add(key);
+          teachersCreated++;
+        }
+
+        if (teacherId !== null) {
+          for (const name of teacherNames) {
+            const classId = resolveClassByName(name);
+            if (!classId) continue;
+            await tx.teacherClass.upsert({
+              where: { teacherId_classId: { teacherId, classId } },
+              update: {},
+              create: { teacherId, classId, subject: subjectByName.get(normalizeKey(name)) ?? t.subject },
+            });
+            teacherAssignments++;
+          }
+        }
+      }
+
+      // ── Paiements groupés ─────────────────────────────────────────────
+      // Un groupe n'est recréé qu'au premier import effectif de l'une de ses
+      // lignes : une ré-importation ne duplique donc jamais les groupes.
       const groupsById = new Map(paymentGroups.map((g) => [g.id, g]));
-      const groupMap = new Map<number, number>(); // original group id -> created id
+      const groupMap = new Map<number, number>(); // id d'origine -> id créé
       const resolveGroupId = async (originalId: number | null | undefined): Promise<number | null> => {
         if (originalId === null || originalId === undefined) return null;
         const created = groupMap.get(originalId);
@@ -534,7 +984,7 @@ router.post(
         if (!g) return null;
         const row = await tx.paymentGroup.create({
           data: {
-            method: g.method,
+            method: toEnumMethod(g.method) ?? 'CASH',
             subtotalCents: g.subtotalCents,
             discountCents: g.discountCents,
             totalCents: g.totalCents,
@@ -545,78 +995,7 @@ router.post(
         return row.id;
       };
 
-      const resolveClassId = (className?: string): number | null =>
-        className ? classMap.get(normalizeKey(className)) ?? null : null;
-
-      for (const c of classes) {
-        const key = normalizeKey(c.name);
-        if (seenClasses.has(key)) continue;
-        const tuitionFeeCents = c.tuitionFeeCents ?? eurosToCents(c.tuitionFee ?? 0);
-        const created = await tx.class.create({
-          data: {
-            name: c.name,
-            tuitionFeeCents,
-            openForRegistration: c.openForRegistration ?? false,
-            scheduleLabel: c.scheduleLabel,
-            capacity: c.capacity ?? null,
-          },
-        });
-        classMap.set(key, created.id);
-        seenClasses.add(key);
-        classesCreated++;
-      }
-
-      for (const st of students) {
-        const key = studentKey(st.firstName, st.lastName);
-        const existingId = studentsByKey.get(key);
-        let studentId: number;
-        if (existingId !== undefined) {
-          studentId = existingId;
-          studentsSkipped++;
-        } else {
-          const created = await tx.student.create({
-            data: {
-              firstName: st.firstName,
-              lastName: st.lastName,
-              phone: st.phone ?? null,
-              birthDate: st.birthDate ?? null,
-              gender: st.gender ?? null,
-              medicalInfo: st.medicalInfo,
-              photoOptOut: st.photoOptOut ?? false,
-              canLeaveAlone: st.canLeaveAlone ?? false,
-              quranLevel: st.quranLevel ?? 1,
-              quranPath: st.quranPath ?? 'BOTTOM_UP',
-              classId: resolveClassId(st.class?.name),
-            },
-          });
-          studentId = created.id;
-          studentsByKey.set(key, studentId);
-          studentsCreated++;
-        }
-        if (st.id !== undefined) studentMap.set(st.id, studentId);
-      }
-
-      for (const t of teachers) {
-        const email = t.email ?? null;
-        const key = email ? normalizeKey(email) : studentKey(t.firstName, t.lastName);
-        if (seenTeachers.has(key)) {
-          teachersSkipped++;
-          continue;
-        }
-        seenTeachers.add(key);
-        await tx.teacher.create({
-          data: {
-            firstName: t.firstName,
-            lastName: t.lastName,
-            subject: t.subject,
-            email,
-            phone: t.phone,
-            classId: resolveClassId(t.class?.name),
-          },
-        });
-        teachersCreated++;
-      }
-
+      // ── Paiements ─────────────────────────────────────────────────────
       for (const p of payments) {
         const newStudentId = studentMap.get(p.studentId ?? -1) ?? studentMap.get(p.student?.id ?? -1);
         if (newStudentId === undefined) {
@@ -635,7 +1014,9 @@ router.post(
           data: {
             amountCents,
             discountCents: p.discountCents ?? 0,
-            method: p.method ?? 'Espèces',
+            method: toEnumMethod(p.method) ?? 'CASH',
+            reference: p.reference,
+            note: p.note,
             studentId: newStudentId,
             date,
             groupId: await resolveGroupId(p.groupId),
@@ -644,25 +1025,70 @@ router.post(
         paymentsCreated++;
       }
 
+      // ── Présences ─────────────────────────────────────────────────────
       for (const a of attendances) {
         const newStudentId = studentMap.get(a.studentId ?? -1) ?? studentMap.get(a.student?.id ?? -1);
         const newClassId = a.class?.name
-          ? classMap.get(normalizeKey(a.class.name)) ?? null
-          : a.classId
-            ? resolveClassId(classes.find((c) => c?.id === a.classId)?.name)
+          ? resolveClassByName(a.class.name)
+          : a.classId !== undefined
+            ? (payloadClassIdToNewId.get(a.classId) ?? null)
             : null;
-        if (newStudentId === undefined || newClassId === null) continue;
+        if (newStudentId === undefined || newClassId === null) {
+          continue;
+        }
+        const storedDate = ymdToDate(a.date.slice(0, 10));
         await tx.attendance.upsert({
-          where: { date_period_studentId: { date: a.date, period: a.period, studentId: newStudentId } },
+          where: { date_period_studentId: { date: storedDate, period: a.period, studentId: newStudentId } },
           update: { status: a.status },
-          create: { date: a.date, period: a.period, studentId: newStudentId, classId: newClassId, status: a.status },
+          create: { date: storedDate, period: a.period, studentId: newStudentId, classId: newClassId, status: a.status },
         });
         attendancesCreated++;
       }
 
-      // ─── School records (v3 backups) ─────────────────────────────────
-      // Subjects and terms are matched by name; an evaluation by class, subject,
-      // term, title and date. Marks, competencies and remarks already present are kept.
+      // ── Historique d'inscriptions ─────────────────────────────────────
+      for (const e of enrollments) {
+        const sid = studentMap.get(e.studentId ?? -1) ?? studentMap.get(e.student?.id ?? -1);
+        const cid = e.class?.name
+          ? resolveClassByNameYear(e.class.name, e.schoolYear?.name ?? null) ?? resolveClassByName(e.class.name)
+          : e.classId !== undefined
+            ? (payloadClassIdToNewId.get(e.classId) ?? null)
+            : null;
+        if (sid === undefined || cid === null) continue;
+        const yid = e.schoolYear?.name ? (yearMap.get(normalizeKey(e.schoolYear.name)) ?? null) : null;
+        const startDate = e.startDate ? ymdToDate(e.startDate.slice(0, 10)) : null;
+        const endDate = e.endDate ? ymdToDate(e.endDate.slice(0, 10)) : null;
+
+        if (e.isActive) {
+          await tx.student.update({ where: { id: sid }, data: { classId: cid } });
+        }
+
+        if (yid !== null) {
+          await tx.enrollment.upsert({
+            where: { studentId_classId_schoolYearId: { studentId: sid, classId: cid, schoolYearId: yid } },
+            update: { isActive: e.isActive, startDate, endDate },
+            create: { studentId: sid, classId: cid, schoolYearId: yid, isActive: e.isActive, startDate, endDate },
+          });
+          enrollmentsCreated++;
+        } else {
+          const existing = await tx.enrollment.findFirst({
+            where: { studentId: sid, classId: cid, schoolYearId: null },
+            select: { id: true },
+          });
+          if (existing) {
+            enrollmentsSkipped++;
+          } else {
+            await tx.enrollment.create({
+              data: { studentId: sid, classId: cid, schoolYearId: null, isActive: e.isActive, startDate, endDate },
+            });
+            enrollmentsCreated++;
+          }
+        }
+      }
+
+      // ── Scolarité (notes, compétences Juz Amma, appréciations) ────────
+      // Matières et périodes sont rapprochées par nom ; une évaluation par
+      // classe, matière, période, intitulé et date. Les notes, compétences et
+      // appréciations déjà présentes sont conservées.
       const subjectMap = new Map(
         (await tx.subject.findMany({ select: { id: true, name: true } })).map((x) => [normalizeKey(x.name), x.id])
       );
@@ -682,7 +1108,8 @@ router.post(
 
       let gradesCreated = 0;
       for (const ev of evaluations) {
-        const classId = resolveClassId(ev.class.name);
+        const classId =
+          resolveClassByNameYear(ev.class.name, ev.class.schoolYear?.name ?? null) ?? resolveClassByName(ev.class.name);
         const subjectId = subjectMap.get(normalizeKey(ev.subject.name));
         const termId = termMap.get(normalizeKey(ev.term.name));
         if (classId === null || subjectId === undefined || termId === undefined) continue;
@@ -693,7 +1120,15 @@ router.post(
           existing?.id ??
           (
             await tx.evaluation.create({
-              data: { classId, subjectId, termId, title: ev.title, date: ev.date, maxScore: ev.maxScore, coefficient: ev.coefficient },
+              data: {
+                classId,
+                subjectId,
+                termId,
+                title: ev.title,
+                date: ev.date,
+                maxScore: ev.maxScore,
+                coefficient: ev.coefficient,
+              },
             })
           ).id;
         const rows = ev.grades.flatMap((g) => {
@@ -767,7 +1202,7 @@ router.post(
       let timetableSlotsCreated = 0;
       const slotMap = new Map<number, number>(); // original course id -> id in this database
       for (const s of timetableSlots) {
-        const classId = resolveClassId(s.class.name);
+        const classId = resolveClassByNameYear(s.class.name, s.class.schoolYear?.name) ?? resolveClassByName(s.class.name);
         const subjectId = resolveSubjectId(s.subject);
         if (classId === null || (s.subject && subjectId === null) || (subjectId === null && !s.label)) continue;
         const existing = await tx.timetableSlot.findFirst({
@@ -795,7 +1230,7 @@ router.post(
 
       let lessonsCreated = 0;
       for (const l of lessons) {
-        const classId = resolveClassId(l.class.name);
+        const classId = resolveClassByNameYear(l.class.name, l.class.schoolYear?.name) ?? resolveClassByName(l.class.name);
         const subjectId = resolveSubjectId(l.subject);
         if (classId === null || (l.subject && subjectId === null) || (!l.content && !l.homework)) continue;
         const slotId = l.slotId !== null && l.slotId !== undefined ? slotMap.get(l.slotId) ?? null : null;
@@ -862,7 +1297,7 @@ router.post(
             children: {
               create: children.map(({ class: cls, studentId, ...child }) => ({
                 ...child,
-                classId: resolveClassId(cls?.name),
+                classId: cls ? resolveClassByNameYear(cls.name, cls.schoolYear?.name) ?? resolveClassByName(cls.name) : null,
                 studentId: studentId !== null && studentId !== undefined ? studentMap.get(studentId) ?? null : null,
               })),
             },
@@ -889,10 +1324,15 @@ router.post(
         timetableSlotsCreated,
         lessonsCreated,
         classesCreated,
+        schoolYearsCreated,
+        familiesCreated,
         studentsCreated,
         teachersCreated,
+        teacherAssignments,
         paymentsCreated,
         attendancesCreated,
+        enrollmentsCreated,
+        enrollmentsSkipped,
         studentsSkipped,
         teachersSkipped,
         paymentsSkipped,
@@ -900,6 +1340,22 @@ router.post(
     });
 
     res.json(counts);
+  })
+);
+
+// DELETE /api/data/reset — efface TOUTES les données métier.
+// Réservé aux ADMIN, exige une confirmation explicite dans le corps de la
+// requête (jamais via un simple GET) et conserve les comptes utilisateurs.
+router.delete(
+  '/data/reset',
+  authenticate,
+  requireAdmin,
+  validate(resetSchema),
+  asyncHandler(async (_req, res) => {
+    // `user` n'est jamais touché.
+    const deleted = await prisma.$transaction((tx) => deleteBusinessData(tx));
+
+    res.json({ success: true, usersPreserved: true, deleted });
   })
 );
 

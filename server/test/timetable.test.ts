@@ -231,8 +231,8 @@ describe('cahier de textes', () => {
     await lesson(ctx, { label: 'Rattrapage', date: SUNDAY });
 
     const backup = (await req.get('/api/export').set(auth(ctx.token))).body;
-    expect(backup.timetableSlots).toHaveLength(2);
-    expect(backup.lessons).toHaveLength(2);
+    expect(backup.data.timetableSlots).toHaveLength(2);
+    expect(backup.data.lessons).toHaveLength(2);
 
     await resetDb();
     const token = await adminToken();

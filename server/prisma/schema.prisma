@@ -7,17 +7,56 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum UserRole {
+  ADMIN
+  STAFF
+  TEACHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  CHEQUE
+  MOBILE_MONEY
+  OTHER
+}
+
+model SchoolYear {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  startDate   DateTime     @db.Date
+  endDate     DateTime     @db.Date
+  active      Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  classes     Class[]
+  enrollments Enrollment[]
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   password  String
-  role          String         @default("STAFF") // ADMIN, STAFF (vie scolaire), TEACHER (prof)
+  role          UserRole       @default(STAFF) // ADMIN, STAFF (vie scolaire), TEACHER (prof)
   // Teacher record of a TEACHER account: gives access to the classes they teach.
   teacherId     Int?           @unique
   teacher       Teacher?       @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  // Pending invitation: the person chooses their password through an emailed link.
+  // Only a hash of the link's token is stored.
+  inviteTokenHash String?      @unique
+  inviteExpiresAt DateTime?
   announcements Announcement[]
   documents     Document[]
   createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 // ─── Messagerie et documents ─────────────────────────────────────────
@@ -54,62 +93,65 @@ model Document {
 }
 
 model Class {
-  id                      Int                    @id @default(autoincrement())
-  name                    String                 @unique
-  tuitionFeeCents         Int                    @default(0)
-  students                Student[]
-  attendances             Attendance[]
-  teachers                Teacher[]
-  evaluations             Evaluation[]
-  timetableSlots          TimetableSlot[]
-  lessons                 Lesson[]
-  // Online pre-registration: whether families can choose this class, the time
-  // slot shown to them ("Samedi matin") and the number of places (null = unlimited).
-  openForRegistration     Boolean                @default(false)
-  scheduleLabel           String?
-  capacity                Int?
+  timetableSlots TimetableSlot[]
+  lessons Lesson[]
+  openForRegistration Boolean @default(false)
+  scheduleLabel String?
+  capacity Int?
   preRegistrationChildren PreRegistrationChild[]
-  createdAt               DateTime               @default(now())
+  id              Int            @id @default(autoincrement())
+  name            String
+  tuitionFeeCents Int            @default(0)
+  schoolYearId    Int?
+  schoolYear      SchoolYear?    @relation(fields: [schoolYearId], references: [id], onDelete: SetNull)
+  students        Student[]
+  attendances     Attendance[]
+  teachers        Teacher[]
+  teacherClasses  TeacherClass[]
+  enrollments     Enrollment[]
+  evaluations     Evaluation[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([name, schoolYearId])
+  @@index([schoolYearId])
 }
 
 model Student {
-  id                      Int                    @id @default(autoincrement())
-  firstName               String
-  lastName                String
-  phone                   String?
-  birthDate               String? // "YYYY-MM-DD"
-  gender                  String? // "F" | "M"
-  medicalInfo             String?
-  photoOptOut             Boolean                @default(false) // the family refuses photos of the child
-  canLeaveAlone           Boolean                @default(false) // allowed to go home alone
-  quranLevel              Int                    @default(1) // Quran programme level (1 to 11), see lib/quran.ts
-  quranPath               String                 @default("BOTTOM_UP") // Dar Al Coran learning path, see lib/quran.ts
-  classId                 Int?
-  class                   Class?                 @relation(fields: [classId], references: [id])
-  guardians               Guardian[]
-  payments                Payment[]
-  attendances             Attendance[]
-  grades                  Grade[]
-  surahLevels             SurahAssessment[]
-  rubLevels               RubAssessment[]
-  reportRemarks           ReportRemark[]
+  birthDate String?
+  gender String?
+  medicalInfo String?
+  photoOptOut Boolean @default(false)
+  canLeaveAlone Boolean @default(false)
+  guardians Guardian[]
+  quranLevel Int @default(1) // Quran programme level (1 to 11), see lib/quran.ts
+  quranPath String @default("BOTTOM_UP") // Dar Al Coran learning path, see lib/quran.ts
+  rubLevels RubAssessment[]
   preRegistrationChildren PreRegistrationChild[]
-  createdAt               DateTime               @default(now())
-}
+  id          Int          @id @default(autoincrement())
+  firstName   String
+  lastName    String
+  phone                  String?
+  dateOfBirth            DateTime? @db.Date
+  wasEnrolled2025_2026   Boolean?
+  arabicCourse           String?
+  quranCourse            String?
+  classId                Int?
+  class       Class?       @relation(fields: [classId], references: [id], onDelete: SetNull)
+  familyId    Int?
+  family      Family?      @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  payments    Payment[]
+  attendances Attendance[]
+  enrollments Enrollment[]
+  grades        Grade[]
+  surahLevels   SurahAssessment[]
+  reportRemarks ReportRemark[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
-// Parent or legal guardian, shared by siblings.
-model Guardian {
-  id           Int       @id @default(autoincrement())
-  relationship String // Mère, Père, Tuteur...
-  firstName    String
-  lastName     String
-  phone        String
-  email        String
-  address      String?
-  profession   String?
-  volunteer    Boolean   @default(false)
-  students     Student[]
-  createdAt    DateTime  @default(now())
+  @@index([lastName, firstName])
+  @@index([classId])
+  @@index([familyId])
 }
 
 model Payment {
@@ -121,20 +163,26 @@ model Payment {
   date          DateTime      @default(now())
   studentId     Int
   student       Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  method        String?       @default("Espèces")
+  method        PaymentMethod @default(CASH)
+  reference     String?
+  note          String?
   // Set when the payment line belongs to a multi-child (grouped) payment.
   groupId       Int?
   group         PaymentGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
+  @@index([studentId])
+  @@index([date])
   @@index([groupId])
 }
 
 // One transaction settling several children at once. Each child keeps its own
 // Payment line (linked through groupId) so balances keep working per student.
 model PaymentGroup {
-  id            Int       @id @default(autoincrement())
-  date          DateTime  @default(now())
-  method        String?   @default("Espèces")
+  id            Int            @id @default(autoincrement())
+  date          DateTime       @default(now())
+  method        PaymentMethod? @default(CASH)
   subtotalCents Int
   discountCents Int
   totalCents    Int
@@ -143,33 +191,82 @@ model PaymentGroup {
 }
 
 model Teacher {
-  id             Int             @id @default(autoincrement())
+  timetableSlots TimetableSlot[]
+  lessons Lesson[]
+  id             Int            @id @default(autoincrement())
   firstName      String
   lastName       String
   subject        String?
-  email          String?         @unique
+  email          String?        @unique
   phone          String?
   classId        Int?
-  class          Class?          @relation(fields: [classId], references: [id])
-  timetableSlots TimetableSlot[]
-  lessons        Lesson[]
+  class          Class?         @relation(fields: [classId], references: [id])
+  teacherClasses TeacherClass[]
   user           User? // the teacher's account, if any
-  createdAt      DateTime        @default(now())
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([lastName, firstName])
+}
+
+model TeacherClass {
+  teacherId Int
+  classId   Int
+  subject   String?
+  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@id([teacherId, classId])
+  @@index([classId])
 }
 
 model Attendance {
-  id        Int     @id @default(autoincrement())
-  date      String // "YYYY-MM-DD"
+  id        Int              @id @default(autoincrement())
+  date      DateTime         @db.Date
   // Half-day of the roll call: AM (courses starting before 13:00) or PM.
   // DAY marks the roll calls taken per day before half-days existed.
-  period    String  @default("DAY")
+  period    String           @default("DAY")
   studentId Int
   classId   Int
-  status    String  @default("PRESENT") // PRESENT, ABSENT, LATE
-  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  status    AttendanceStatus @default(PRESENT)
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
   @@unique([date, period, studentId])
+  @@index([classId, date])
+}
+
+model Enrollment {
+  id           Int         @id @default(autoincrement())
+  studentId    Int
+  classId      Int
+  schoolYearId Int?
+  isActive     Boolean     @default(true)
+  startDate    DateTime?   @db.Date
+  endDate      DateTime?   @db.Date
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  student      Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class        Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  schoolYear   SchoolYear? @relation(fields: [schoolYearId], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, classId, schoolYearId])
+  @@index([studentId])
+  @@index([classId])
+  @@index([isActive])
+}
+
+model Family {
+  id        Int       @id @default(autoincrement())
+  name      String?
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  students  Student[]
 }
 
 // ─── Scolarité : notes, compétences Juz Amma, bulletins ──────────────
@@ -177,13 +274,13 @@ model Attendance {
 // Subject graded with marks (Arabe, Éducation islamique...). The Juz Amma is
 // NOT a subject: it is assessed with competencies (see SurahAssessment).
 model Subject {
-  id             Int             @id @default(autoincrement())
-  name           String          @unique
-  coefficient    Int             @default(1)
-  evaluations    Evaluation[]
   timetableSlots TimetableSlot[]
-  lessons        Lesson[]
-  createdAt      DateTime        @default(now())
+  lessons Lesson[]
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  coefficient Int          @default(1)
+  evaluations Evaluation[]
+  createdAt   DateTime     @default(now())
 }
 
 // A grading period (trimestre, semestre...). Its dates bound the attendance
@@ -273,11 +370,20 @@ model ReportRemark {
   @@unique([studentId, termId])
 }
 
-// ─── Emplois du temps et cahier de textes ────────────────────────────
+model Guardian {
+  id           Int       @id @default(autoincrement())
+  relationship String // Mère, Père, Tuteur...
+  firstName    String
+  lastName     String
+  phone        String
+  email        String
+  address      String?
+  profession   String?
+  volunteer    Boolean   @default(false)
+  students     Student[]
+  createdAt    DateTime  @default(now())
+}
 
-// Weekly recurring course of a class (e.g. every Saturday 09:00-10:30, Arabe).
-// The activity is either a graded subject or a free label (Coran, Juz Amma...),
-// since the Juz Amma is not a subject.
 model TimetableSlot {
   id        Int      @id @default(autoincrement())
   dayOfWeek Int // 1 = lundi ... 7 = dimanche (ISO 8601)
@@ -298,9 +404,6 @@ model TimetableSlot {
   @@index([teacherId, dayOfWeek])
 }
 
-// One session actually held (cahier de textes): what was done and the work to
-// do for the next session. Subject, label and times are copied from the slot so
-// the log stays right when the timetable changes later in the year.
 model Lesson {
   id              Int            @id @default(autoincrement())
   date            String // "YYYY-MM-DD"
@@ -326,9 +429,6 @@ model Lesson {
   @@index([homeworkDueDate])
 }
 
-// ─── Pré-inscriptions en ligne ───────────────────────────────────────
-
-// Settings of the online pre-registration form (a single row, id = 1).
 model RegistrationSettings {
   id               Int      @id @default(1)
   isOpen           Boolean  @default(false)
@@ -341,8 +441,6 @@ model RegistrationSettings {
   updatedAt        DateTime @updatedAt
 }
 
-// File sent by a family from the public form. Nothing reaches the student list
-// until the mosque validates it.
 model PreRegistration {
   id            Int                       @id @default(autoincrement())
   reference     String                    @unique // PI-2026-0001

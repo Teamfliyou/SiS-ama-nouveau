@@ -136,18 +136,58 @@ const optionalIdSchema = (message: string) =>
       .transform((v) => (v === '' || v === null || v === undefined ? null : v as number))
   );
 
-const optionalClassIdSchema = optionalIdSchema('La classe doit être un entier positif');
 
 export const classCreateSchema = z.object({
   name: nameField('Le nom de la classe', 120),
   tuitionFee: euroAmount(0, 'Les frais de scolarité').optional(),
+  schoolYearId: z.number().int().positive('Année scolaire invalide').nullable().optional(),
+});
+
+/** Accepts a numeric string ("3") as sent by HTML selects; other values are left untouched. */
+const numericStringToNumber = (v: unknown) => (typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : v);
+
+/** Optional id (class, family...). Numeric strings are accepted; '' means none. */
+const optionalIdField = (label: string) =>
+  z.preprocess(
+    numericStringToNumber,
+    z
+      .union([z.number().int().positive(label), z.null(), z.literal('')])
+      .nullable()
+      .optional()
+      .transform((v) => (v === '' || v === null || v === undefined ? null : (v as number)))
+  );
+
+const optionalDateField = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? null : v === undefined ? null : v),
+  z
+    .union([
+      z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, 'La date doit être au format YYYY-MM-DD')
+        .refine(isRealDateString, { message: 'Date inexistante' }),
+      z.null(),
+    ])
+    .optional()
+);
+
+const studentParentSchema = z.object({
+  name: optionalTextField('Le nom du parent', 160),
+  phone: optionalPhoneSchema,
+  email: optionalEmailSchema,
+  address: optionalTextField("L'adresse du parent", 255),
 });
 
 export const studentCreateSchema = z.object({
   firstName: nameField('Le prénom'),
   lastName: nameField('Le nom'),
   phone: optionalPhoneSchema,
-  classId: optionalClassIdSchema,
+  dateOfBirth: optionalDateField,
+  wasEnrolled2025_2026: z.boolean().nullable().optional(),
+  arabicCourse: optionalTextField('ARABE', 120),
+  quranCourse: optionalTextField('CORAN', 120),
+  classId: optionalIdField('La classe doit être un entier positif'),
+  familyId: optionalIdField('La famille doit être un entier positif'),
+  parent: studentParentSchema.optional(),
 });
 
 export const teacherCreateSchema = z.object({
@@ -156,13 +196,28 @@ export const teacherCreateSchema = z.object({
   subject: optionalTextField('La matière'),
   email: optionalEmailSchema,
   phone: optionalPhoneSchema,
-  classId: optionalClassIdSchema,
+  classId: optionalIdField('La classe doit être un entier positif'),
+  classIds: z
+    .array(z.preprocess(numericStringToNumber, z.number().int().positive('Classe invalide')))
+    .max(50)
+    .optional(),
 });
+
+export const familyCreateSchema = z.object({
+  name: optionalTextField('Le nom de la famille', 120),
+  phone: optionalPhoneSchema,
+  email: optionalEmailSchema,
+  address: optionalTextField("L'adresse", 255),
+});
+
+export const familyUpdateSchema = familyCreateSchema;
 
 export const paymentCreateSchema = z.object({
   amount: euroAmount(0.01, 'Le montant'),
   studentId: z.number().int().positive('Élève invalide'),
   method: optionalTextField('La méthode', 50),
+  reference: optionalTextField('La référence', 120),
+  note: optionalTextField('La note', 500),
 });
 
 // Multi-child payment: the client only sends WHO is paid. Amounts are always
@@ -181,10 +236,12 @@ export const paymentGroupCreateSchema = z.object({
 export const paymentUpdateSchema = z.object({
   amount: euroAmount(0.01, 'Le montant'),
   method: optionalTextField('La méthode', 50),
+  reference: optionalTextField('La référence', 120),
+  note: optionalTextField('La note', 500),
 });
 
-export const attendanceStatusSchema = z.enum(['PRESENT', 'ABSENT', 'LATE'], {
-  message: 'Statut invalide (PRESENT, ABSENT ou LATE uniquement)',
+export const attendanceStatusSchema = z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'], {
+  message: 'Statut invalide (PRESENT, ABSENT, LATE ou EXCUSED uniquement)',
 });
 
 /** True when `value` is a real calendar day in strict YYYY-MM-DD form (e.g. 2026-02-31 is rejected). */
@@ -203,6 +260,20 @@ export const dateStringSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'La date doit être au format YYYY-MM-DD')
   .refine(isRealDateString, { message: 'Date inexistante' });
+
+export const schoolYearCreateSchema = z.object({
+  name: nameField("Le nom de l'année", 120),
+  startDate: dateStringSchema,
+  endDate: dateStringSchema,
+  active: z.boolean().optional().default(false),
+});
+
+export const schoolYearUpdateSchema = z.object({
+  name: nameField("Le nom de l'année", 120).optional(),
+  startDate: dateStringSchema.optional(),
+  endDate: dateStringSchema.optional(),
+  active: z.boolean().optional(),
+});
 
 export const attendanceCreateSchema = z.object({
   date: dateStringSchema,

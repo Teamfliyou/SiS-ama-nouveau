@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, reportRemarkSchema, parseId } from '../lib/validate';
 import { computeClassResults } from '../lib/reportCard';
+import { ymdToDate } from '../lib/dates';
 import { assertClassAccess, assertStudentsAccess } from '../lib/access';
 import {
   QURAN_LEVELS,
@@ -58,7 +59,8 @@ router.get(
       prisma.evaluation.findMany({ where: { classId: cid, termId: tid }, include: { grades: true } }),
       prisma.attendance.groupBy({
         by: ['studentId', 'status'],
-        where: { studentId: { in: wanted }, date: { gte: term.startDate, lte: term.endDate } },
+        // Attendance.date is a DATE column; the term bounds are "YYYY-MM-DD" days.
+        where: { studentId: { in: wanted }, date: { gte: ymdToDate(term.startDate), lte: ymdToDate(term.endDate) } },
         _count: { _all: true },
       }),
       // This term and the earlier ones, oldest first: the latest level per surah wins.
@@ -73,7 +75,12 @@ router.get(
         orderBy: { term: { startDate: 'asc' } },
       }),
       prisma.reportRemark.findMany({ where: { studentId: { in: wanted }, termId: tid } }),
-      prisma.teacher.findMany({ where: { classId: cid }, select: { firstName: true, lastName: true, subject: true } }),
+      // Main class (legacy classId) or any class assigned through TeacherClass.
+      prisma.teacher.findMany({
+        where: { OR: [{ classId: cid }, { teacherClasses: { some: { classId: cid } } }] },
+        select: { firstName: true, lastName: true, subject: true },
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+      }),
     ]);
 
     const results = computeClassResults(ids, subjects, evaluations);
@@ -94,7 +101,12 @@ router.get(
         return {
           student,
           ...results.get(s.id)!,
-          attendance: { present: count('PRESENT'), absent: count('ABSENT'), late: count('LATE') },
+          attendance: {
+            present: count('PRESENT'),
+            absent: count('ABSENT'),
+            late: count('LATE'),
+            excused: count('EXCUSED'),
+          },
           quran: {
             level: level.level,
             levelName: level.name,

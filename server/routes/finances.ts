@@ -11,6 +11,7 @@ import {
   parseId,
 } from '../lib/validate';
 import { eurosToCents, centsToEuros } from '../lib/money';
+import { toEnumMethod, toLabelMethod, PAYMENT_METHOD_DEFAULT } from '../lib/paymentMethods';
 import { studentBalance, computeFamilyPayment } from '../lib/billing';
 
 const router = Router();
@@ -35,6 +36,8 @@ type PaymentRow = {
   discountCents: number;
   date: Date;
   method: string | null;
+  reference: string | null;
+  note: string | null;
   studentId: number;
   groupId: number | null;
   group?: GroupRow | null;
@@ -49,6 +52,7 @@ type PaymentRow = {
 
 const mapGroup = (g: GroupRow) => ({
   ...g,
+  method: toLabelMethod(g.method),
   subtotal: centsToEuros(g.subtotalCents),
   discount: centsToEuros(g.discountCents),
   total: centsToEuros(g.totalCents),
@@ -58,6 +62,8 @@ const mapPayment = (p: PaymentRow) => ({
   ...p,
   amountCents: p.amountCents,
   amount: centsToEuros(p.amountCents),
+  // La valeur stockée est la clé d'enum ; le frontend affiche le label français.
+  method: toLabelMethod(p.method),
   discount: centsToEuros(p.discountCents),
   group: p.group ? mapGroup(p.group) : null,
 });
@@ -91,15 +97,23 @@ router.post(
   '/',
   validate(paymentCreateSchema),
   asyncHandler(async (req, res) => {
-    const { amount, studentId, method } = req.body as {
+    const { amount, studentId, method, reference, note } = req.body as {
       amount: number;
       studentId: number;
       method: string | null;
+      reference: string | null;
+      note: string | null;
     };
     const student = await prisma.student.findUnique({ where: { id: studentId } });
     if (!student) throw new AppError(400, 'Élève introuvable');
     const payment = await prisma.payment.create({
-      data: { amountCents: eurosToCents(amount), studentId, method: method ?? 'Espèces' },
+      data: {
+        amountCents: eurosToCents(amount),
+        studentId,
+        method: toEnumMethod(method) ?? PAYMENT_METHOD_DEFAULT,
+        reference,
+        note,
+      },
       include: paymentInclude,
     });
     res.status(201).json(mapPayment(payment as PaymentRow));
@@ -119,7 +133,7 @@ router.post(
       method: string | null;
       expectedTotalCents?: number;
     };
-    const payMethod = method ?? 'Espèces';
+    const payMethod = toEnumMethod(method) ?? PAYMENT_METHOD_DEFAULT;
 
     const run = () =>
       prisma.$transaction(
@@ -201,7 +215,7 @@ router.post(
       subtotal: centsToEuros(quote.subtotalCents),
       discount: centsToEuros(quote.discountCents),
       total: centsToEuros(quote.totalCents),
-      method: payMethod,
+      method: toLabelMethod(payMethod),
       students: ordered.map((s, i) => ({
         id: s.id,
         firstName: s.firstName,
@@ -250,13 +264,23 @@ router.put(
   validate(paymentUpdateSchema),
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id, 'Identifiant de paiement invalide');
-    const { amount, method } = req.body as { amount: number; method: string | null };
+    const { amount, method, reference, note } = req.body as {
+      amount: number;
+      method: string | null;
+      reference: string | null;
+      note: string | null;
+    };
     const exists = await prisma.payment.findUnique({ where: { id } });
     if (!exists) throw new AppError(404, 'Paiement introuvable');
     assertNotGrouped(exists);
     const payment = await prisma.payment.update({
       where: { id },
-      data: { amountCents: eurosToCents(amount), method: method ?? 'Espèces' },
+      data: {
+        amountCents: eurosToCents(amount),
+        method: method === null || method === undefined ? exists.method : (toEnumMethod(method) ?? PAYMENT_METHOD_DEFAULT),
+        reference,
+        note,
+      },
       include: paymentInclude,
     });
     res.json(mapPayment(payment as PaymentRow));

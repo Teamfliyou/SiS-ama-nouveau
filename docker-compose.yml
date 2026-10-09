@@ -1,0 +1,62 @@
+name: sis-ama
+
+services:
+  backend:
+    build:
+      context: ./server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL manquant dans Coolify}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant dans Coolify}
+      FRONTEND_URL: ${FRONTEND_URL:-https://sis.assoma.fr}
+      CORS_ORIGIN: ${FRONTEND_URL:-https://sis.assoma.fr}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-ASSO AMA SIS}
+      PUBLIC_FORM_RATE_MAX: ${PUBLIC_FORM_RATE_MAX:-10}
+      PUBLIC_FORM_RATE_WINDOW_MS: ${PUBLIC_FORM_RATE_WINDOW_MS:-3600000}
+      TRUST_PROXY: "true"
+      LOGIN_RATE_MAX: ${LOGIN_RATE_MAX:-5}
+      LOGIN_RATE_IP_MAX: ${LOGIN_RATE_IP_MAX:-20}
+      LOGIN_RATE_WINDOW_MS: ${LOGIN_RATE_WINDOW_MS:-900000}
+      RATE_MAX_GENERAL: ${RATE_MAX_GENERAL:-300}
+      RATE_WINDOW_GENERAL_MS: ${RATE_WINDOW_GENERAL_MS:-900000}
+    expose:
+      - "5000"
+    networks:
+      - default
+      - coolify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:5000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8081:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  coolify:
+    external: true

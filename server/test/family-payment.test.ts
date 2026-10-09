@@ -151,7 +151,7 @@ describe('POST /api/finances/group', () => {
     const { token, ids } = await setup([150, 120]);
     await req.post('/api/finances/group').set(auth(token)).send({ studentIds: ids });
     const backup = (await req.get('/api/export').set(auth(token))).body;
-    expect(backup.paymentGroups).toHaveLength(1);
+    expect(backup.data.paymentGroups).toHaveLength(1);
     await resetDb();
     const t = await adminToken();
     const imp = await req.post('/api/import/full').set(auth(t)).send(backup);

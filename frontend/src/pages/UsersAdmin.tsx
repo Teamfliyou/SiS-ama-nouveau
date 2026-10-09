@@ -7,6 +7,7 @@ import Sheet from '../components/mobile/Sheet';
 import ActionMenu from '../components/mobile/ActionMenu';
 import { mList } from '../components/mobile/styles';
 import { ROLES, roleInfo, type Role } from '../utils/roles';
+import type { AccountStatus } from '../utils/invitations';
 
 type User = {
   id: number;
@@ -14,6 +15,8 @@ type User = {
   role: Role;
   teacherId: number | null;
   teacher: { id: number; firstName: string; lastName: string } | null;
+  /** INVITED / EXPIRED: the person has not chosen their password yet. */
+  status: AccountStatus;
   createdAt: string;
 };
 type TeacherItem = { id: number; firstName: string; lastName: string };
@@ -201,6 +204,8 @@ export default function UsersAdmin() {
       {roleInfo(user.role).label}
       {user.teacher && <> · {teacherName(user.teacher)}</>}
       {user.role === 'TEACHER' && !user.teacher && <span className="text-red-600"> · sans fiche professeur</span>}
+      {user.status === 'INVITED' && <span className="text-amber-600"> · invitation en attente</span>}
+      {user.status === 'EXPIRED' && <span className="text-red-600"> · invitation expirée</span>}
     </>
   );
 
@@ -327,6 +332,8 @@ export default function UsersAdmin() {
                     <p className="text-xs text-slate-400 mt-0.5">
                       {user.teacher && <>{teacherName(user.teacher)} · </>}
                       {user.role === 'TEACHER' && !user.teacher && <span className="text-red-600">Sans fiche professeur · </span>}
+                      {user.status === 'INVITED' && <span className="text-amber-600">Invitation en attente · </span>}
+                      {user.status === 'EXPIRED' && <span className="text-red-600">Invitation expirée (à renvoyer depuis la fiche professeur) · </span>}
                       Créé le {new Date(user.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
                   </div>

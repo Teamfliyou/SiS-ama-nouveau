@@ -3,15 +3,21 @@ import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, attendanceCreateSchema, parseId, isRealDateString } from '../lib/validate';
+import { ymdToDate, toYmd } from '../lib/dates';
 import { halfDaysOn, canTakeRollCall, schoolToday, PERIOD_LABELS, type HalfDay } from '../lib/attendance';
 import { activityName } from '../lib/schedule';
 import { assertClassAccess, assertStudentsAccess } from '../lib/access';
 
 // Roll call: one per class and half-day of its timetable, on the day itself
-// (an admin may correct or catch up a past day).
+// (an admin may correct or catch up a past day). Dates are calendar days
+// (PostgreSQL DATE), exchanged with the frontend as "YYYY-MM-DD".
 const router = Router();
 
 router.use(authenticate);
+
+type Status = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
+
+const mapRecord = (r: { date: Date } & Record<string, unknown>) => ({ ...r, date: toYmd(r.date) });
 
 /** The class and date of a request, once checked that the account may see the class. */
 async function readClassAndDate(req: Request) {
@@ -31,8 +37,11 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { cid, date } = await readClassAndDate(req);
-    const records = await prisma.attendance.findMany({ where: { classId: cid, date } });
-    res.json(records);
+    const records = await prisma.attendance.findMany({
+      where: { classId: cid, date: ymdToDate(date) },
+      orderBy: { studentId: 'asc' },
+    });
+    res.json(records.map(mapRecord));
   })
 );
 
@@ -45,7 +54,10 @@ router.get(
     const { cid, date } = await readClassAndDate(req);
     const [slots, records] = await Promise.all([
       prisma.timetableSlot.findMany({ where: { classId: cid }, include: { subject: { select: { name: true } } } }),
-      prisma.attendance.findMany({ where: { classId: cid, date }, select: { studentId: true, status: true, period: true } }),
+      prisma.attendance.findMany({
+        where: { classId: cid, date: ymdToDate(date) },
+        select: { studentId: true, status: true, period: true },
+      }),
     ]);
     const today = schoolToday();
     const recordsOf = (period: string) =>
@@ -85,19 +97,21 @@ router.get(
       where: { classId: cid },
       _count: { _all: true },
     });
-    type Call = { date: string; period: string; label: string; PRESENT: number; ABSENT: number; LATE: number };
+    type Call = { date: string; period: string; label: string } & Record<Status, number>;
     const calls = new Map<string, Call>();
     for (const r of rows) {
-      const key = `${r.date}|${r.period}`;
+      const date = toYmd(r.date);
+      const key = `${date}|${r.period}`;
       const call = calls.get(key) ?? {
-        date: r.date,
+        date,
         period: r.period,
         label: PERIOD_LABELS[r.period] ?? r.period,
         PRESENT: 0,
         ABSENT: 0,
         LATE: 0,
+        EXCUSED: 0,
       };
-      if (r.status === 'PRESENT' || r.status === 'ABSENT' || r.status === 'LATE') call[r.status] += r._count._all;
+      call[r.status as Status] += r._count._all;
       calls.set(key, call);
     }
     // Latest first; in a day, the afternoon before the morning.
@@ -122,7 +136,7 @@ router.post(
     const { date, period, records } = req.body as {
       date: string;
       period: HalfDay;
-      records: { studentId: number; classId?: number | null; status: 'PRESENT' | 'ABSENT' | 'LATE' }[];
+      records: { studentId: number; classId?: number | null; status: Status }[];
     };
     if (!canTakeRollCall(date, canCorrectPast(req))) {
       throw new AppError(
@@ -166,14 +180,15 @@ router.post(
       }
     }
 
+    const storedDate = ymdToDate(date);
     const result = await prisma.$transaction(async (tx) => {
       let saved = 0;
       for (const r of records) {
         const classId = classOf.get(r.studentId) as number;
         await tx.attendance.upsert({
-          where: { date_period_studentId: { date, period, studentId: r.studentId } },
+          where: { date_period_studentId: { date: storedDate, period, studentId: r.studentId } },
           update: { status: r.status, classId },
-          create: { date, period, studentId: r.studentId, classId, status: r.status },
+          create: { date: storedDate, period, studentId: r.studentId, classId, status: r.status },
         });
         saved++;
       }

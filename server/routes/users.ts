@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { authenticate, requireAdmin, type Role } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, userCreateSchema, roleUpdateSchema, parseId } from '../lib/validate';
+import { accountStatus } from '../lib/invitations';
 
 const router = Router();
 
@@ -18,8 +19,16 @@ const SAFE_USER_SELECT = {
   role: true,
   teacherId: true,
   teacher: { select: { id: true, firstName: true, lastName: true } },
+  inviteTokenHash: true,
+  inviteExpiresAt: true,
   createdAt: true,
 } as const;
+
+/** Account for the admin screen: the invitation status, never the token hash. */
+const mapUser = <T extends { inviteTokenHash: string | null; inviteExpiresAt: Date | null }>({ inviteTokenHash, ...u }: T) => ({
+  ...u,
+  status: accountStatus({ inviteTokenHash, inviteExpiresAt: u.inviteExpiresAt }),
+});
 
 /** The teacher record of a Prof account must exist and not already have an account. */
 async function checkTeacher(teacherId: number | null, userId?: number) {
@@ -34,7 +43,7 @@ router.get(
   '/',
   asyncHandler(async (_req, res) => {
     const users = await prisma.user.findMany({ select: SAFE_USER_SELECT, orderBy: { createdAt: 'asc' } });
-    res.json(users);
+    res.json(users.map(mapUser));
   })
 );
 
@@ -50,7 +59,7 @@ router.post(
       data: { email, password: hashed, role, teacherId },
       select: SAFE_USER_SELECT,
     });
-    res.status(201).json(user);
+    res.status(201).json(mapUser(user));
   })
 );
 
@@ -89,7 +98,7 @@ router.put(
       }
       return updated;
     });
-    res.json(user);
+    res.json(mapUser(user));
   })
 );
 

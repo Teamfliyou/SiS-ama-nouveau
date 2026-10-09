@@ -61,9 +61,9 @@ describe('roll call per half-day', () => {
       const res = await req.post('/api/timetable').set(auth(admin)).send({ classId: cls.id, dayOfWeek, startTime, endTime, label });
       expect(res.status).toBe(201);
     }
-    // The teacher in charge of the class, with a Prof account.
+    // The teacher in charge of the class, with a Prof account (linked by hand: no email on the record).
     const teacher = (
-      await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Karim', lastName: 'H', email: uniqueEmail('karim'), classId: cls.id })
+      await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Karim', lastName: 'H', classId: cls.id })
     ).body;
     const profEmail = uniqueEmail('prof');
     const account = await req
@@ -99,8 +99,8 @@ describe('roll call per half-day', () => {
 
     const history = (await req.get(`/api/attendance/history?classId=${ctx.classId}`).set(auth(ctx.staff))).body;
     expect(history).toEqual([
-      { date: ctx.today, period: 'PM', label: 'Après-midi', PRESENT: 0, ABSENT: 1, LATE: 1 },
-      { date: ctx.today, period: 'AM', label: 'Matin', PRESENT: 1, ABSENT: 1, LATE: 0 },
+      { date: ctx.today, period: 'PM', label: 'Après-midi', PRESENT: 0, ABSENT: 1, LATE: 1, EXCUSED: 0 },
+      { date: ctx.today, period: 'AM', label: 'Matin', PRESENT: 1, ABSENT: 1, LATE: 0, EXCUSED: 0 },
     ]);
   });
 
