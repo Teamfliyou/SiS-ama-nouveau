@@ -19,6 +19,7 @@ import SchoolSettings from './pages/SchoolSettings';
 import Timetable from './pages/Timetable';
 import LessonLog from './pages/LessonLog';
 import PreRegistrationForm from './pages/PreRegistrationForm';
+import Invitation from './pages/Invitation';
 import PreRegistrations from './pages/PreRegistrations';
 import Layout from './components/Layout';
 import ThemedPage from './components/ThemedPage';
@@ -47,6 +48,8 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/setup" element={<Setup />} />
         <Route path="/preinscription" element={<PreRegistrationForm />} />
+        {/* Lien d'invitation reçu par e-mail : le professeur choisit son mot de passe. */}
+        <Route path="/invitation" element={<Invitation />} />
 
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />

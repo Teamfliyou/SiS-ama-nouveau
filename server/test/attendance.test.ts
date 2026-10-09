@@ -61,9 +61,9 @@ describe('roll call per half-day', () => {
       const res = await req.post('/api/timetable').set(auth(admin)).send({ classId: cls.id, dayOfWeek, startTime, endTime, label });
       expect(res.status).toBe(201);
     }
-    // The teacher in charge of the class, with a Prof account.
+    // The teacher in charge of the class, with a Prof account (linked by hand: no email on the record).
     const teacher = (
-      await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Karim', lastName: 'H', email: uniqueEmail('karim'), classId: cls.id })
+      await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Karim', lastName: 'H', classId: cls.id })
     ).body;
     const profEmail = uniqueEmail('prof');
     const account = await req

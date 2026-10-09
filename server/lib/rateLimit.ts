@@ -73,8 +73,9 @@ const LOGIN_WINDOW_MS = envInt(process.env.LOGIN_RATE_WINDOW_MS, 15 * 60 * 1000)
 const LOGIN_IP_MAX = envInt(process.env.LOGIN_RATE_IP_MAX, 20);
 
 const emailKeyOf = (req: Request): string => {
-  const email = (req.body?.email as string | undefined) ?? '';
-  return email.trim().toLowerCase();
+  // A malformed body (email not a string) is refused later by validation, not a 500 here.
+  const email: unknown = req.body?.email;
+  return typeof email === 'string' ? email.trim().toLowerCase() : '';
 };
 
 const perEmail = createLimiter({ windowMs: LOGIN_WINDOW_MS, max: LOGIN_MAX, key: emailKeyOf });

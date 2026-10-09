@@ -47,6 +47,11 @@ describe('authentication', () => {
     expect(res.body.role).toBe('ADMIN');
   });
 
+  it('refuses a malformed login (email not a string) with 400, not a server error', async () => {
+    const res = await req.post('/api/auth/login').send({ email: { value: 'x@y.fr' }, password: TEST_PASSWORD });
+    expect(res.status).toBe(400);
+  });
+
   it('does NOT allow enumeration: same message for unknown email and wrong password', async () => {
     const email = uniqueEmail('enum');
     const wrongPwd = await req.post('/api/auth/login').send({ email: email, password: 'WrongPass123!' });

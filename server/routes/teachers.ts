@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { authenticate, requireStaff } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, teacherCreateSchema, parseId } from '../lib/validate';
+import { accountStatus, inviteTeacher, type InvitationResult } from '../lib/invitations';
 
 const router = Router();
 
@@ -18,6 +19,7 @@ type TeacherRow = {
   classId: number | null;
   class: { id: number; name: string; subject?: string | null } | null;
   teacherClasses?: { class: { id: number; name: string }; subject: string | null }[];
+  user?: { email: string; inviteTokenHash: string | null; inviteExpiresAt: Date | null } | null;
 };
 
 const mapTeacher = (t: TeacherRow) => ({
@@ -30,12 +32,27 @@ const mapTeacher = (t: TeacherRow) => ({
     subject: tc.subject ?? t.subject,
   })),
   teacherClasses: undefined,
+  // Prof account of the teacher: null when it has none yet.
+  user: undefined,
+  account: t.user
+    ? { email: t.user.email, status: accountStatus(t.user), inviteExpiresAt: t.user.inviteExpiresAt }
+    : null,
 });
 
 const teacherInclude = {
   class: true,
   teacherClasses: { include: { class: { select: { id: true, name: true } } }, orderBy: { classId: 'asc' } },
+  user: { select: { email: true, inviteTokenHash: true, inviteExpiresAt: true } },
 } as const;
+
+/** Invites a teacher without failing the save of the record: the outcome is reported. */
+async function tryInvite(teacherId: number): Promise<InvitationResult | { error: string }> {
+  try {
+    return await inviteTeacher(teacherId);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "L'invitation n'a pas pu être envoyée" };
+  }
+}
 
 type Assignments = { classIds?: number[]; classId: number | null };
 
@@ -101,7 +118,10 @@ router.post(
       }
       return tx.teacher.findUniqueOrThrow({ where: { id: created.id }, include: teacherInclude });
     });
-    res.status(201).json(mapTeacher(teacher as TeacherRow));
+    // Every teacher needs an access (roll call, marks...): invited as soon as an email is known.
+    const invitation = teacher.email ? await tryInvite(teacher.id) : null;
+    const fresh = await prisma.teacher.findUniqueOrThrow({ where: { id: teacher.id }, include: teacherInclude });
+    res.status(201).json({ ...mapTeacher(fresh as TeacherRow), invitation });
   })
 );
 
@@ -145,7 +165,21 @@ router.put(
       });
       return tx.teacher.findUniqueOrThrow({ where: { id }, include: teacherInclude });
     });
-    res.json(mapTeacher(teacher as TeacherRow));
+    const invitation = teacher.email && !teacher.user ? await tryInvite(teacher.id) : null;
+    const fresh = invitation
+      ? await prisma.teacher.findUniqueOrThrow({ where: { id }, include: teacherInclude })
+      : teacher;
+    res.json({ ...mapTeacher(fresh as TeacherRow), invitation });
+  })
+);
+
+// POST /api/teachers/:id/invitation — creates the Prof account if needed and sends a
+// new invitation link (also for a teacher who forgot their password).
+router.post(
+  '/:id/invitation',
+  requireStaff,
+  asyncHandler(async (req, res) => {
+    res.json(await inviteTeacher(parseId(req.params.id, 'Identifiant de professeur invalide')));
   })
 );
 

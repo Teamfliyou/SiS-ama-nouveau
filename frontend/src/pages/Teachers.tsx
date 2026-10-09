@@ -6,11 +6,14 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import Sheet from '../components/mobile/Sheet';
 import ActionMenu from '../components/mobile/ActionMenu';
 import { mList } from '../components/mobile/styles';
+import TeacherAccess from '../components/TeacherAccess';
+import { invitationMessage, type InvitationResult, type TeacherAccount } from '../utils/invitations';
 
 type Teacher = {
   id: number; firstName: string; lastName: string;
   subject: string | null; email: string | null; phone: string | null;
   classId: number | null; class: { id: number; name: string } | null;
+  account: TeacherAccount;
   createdAt: string;
 };
 type ClassItem = { id: number; name: string };
@@ -43,6 +46,8 @@ export default function Teachers() {
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [detailTeacher, setDetailTeacher] = useState<Teacher | null>(null);
+  // Invitation made when saving a record (its link is shown when the email did not leave).
+  const [invitation, setInvitation] = useState<{ teacherId: number; result: InvitationResult } | null>(null);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -55,7 +60,10 @@ export default function Teachers() {
 
   const fetchTeachers = async () => {
     const res = await authFetch('/api/teachers');
-    if (res.ok) setTeachers(await safeJson<Teacher[]>(res));
+    if (!res.ok) return;
+    const list = await safeJson<Teacher[]>(res);
+    setTeachers(list);
+    setDetailTeacher((d) => (d ? list.find((x) => x.id === d.id) ?? null : d));
   };
 
   const openCreate = () => { setEditingId(null); setForm(EMPTY); setError(''); setShowForm(true); };
@@ -85,6 +93,13 @@ export default function Teachers() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setError(data.error); toast.error(data.error || "Erreur lors de l'enregistrement"); return; }
       toast.success(editingId ? 'Professeur modifié avec succès' : 'Professeur ajouté avec succès');
+      // Every teacher with an email gets their access: report the invitation.
+      if (data.invitation) {
+        setInvitation({ teacherId: data.id, result: data.invitation });
+        const msg = invitationMessage(data.invitation);
+        if (msg.ok) toast.success(msg.text);
+        else toast.error(msg.text);
+      }
       setShowForm(false);
       fetchTeachers();
     } catch {
@@ -319,6 +334,10 @@ export default function Teachers() {
                     <p className="text-xs text-slate-300 italic">Aucune information complémentaire</p>
                   )}
                 </div>
+                <div className="mt-4 pt-3 border-t border-slate-100">
+                  <TeacherAccess teacherId={t.id} email={t.email} account={t.account} compact
+                    result={invitation?.teacherId === t.id ? invitation.result : null} onChanged={fetchTeachers} />
+                </div>
               </div>
             );
           })}
@@ -380,6 +399,12 @@ export default function Teachers() {
                   <p className="text-xs font-semibold text-slate-400 uppercase">Téléphone</p>
                   <p className="text-sm font-semibold text-slate-700">{detailTeacher.phone ? <a href={`tel:${detailTeacher.phone.replace(/\s/g, '')}`} className="mobile:text-primary">{detailTeacher.phone}</a> : 'Non renseigné'}</p>
                 </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl">
+                <p className="text-xs font-semibold text-slate-400 uppercase mb-1.5">Accès à l'application</p>
+                <TeacherAccess teacherId={detailTeacher.id} email={detailTeacher.email} account={detailTeacher.account}
+                  result={invitation?.teacherId === detailTeacher.id ? invitation.result : null} onChanged={fetchTeachers} />
               </div>
 
               <div className="flex justify-end gap-3 pt-2 mobile:grid mobile:grid-cols-2 mobile:gap-2">

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { authFetch, safeJson } from '../utils/api';
+import type { InvitationResult, TeacherAccount } from '../utils/invitations';
 
 export type Teacher = {
   id: number;
@@ -11,8 +12,13 @@ export type Teacher = {
   classId: number | null;
   class: { id: number; name: string } | null;
   classes: { id: number; name: string; subject: string | null }[];
+  /** Prof account of the teacher (null: none yet). */
+  account: TeacherAccount;
   createdAt: string;
 };
+
+/** A saved teacher, with the invitation sent to them if any. */
+export type SavedTeacher = Teacher & { invitation: InvitationResult | null };
 
 export type TeacherInput = {
   firstName: string;
@@ -45,7 +51,7 @@ export function useTeachers() {
   const create = useCallback(
     async (input: TeacherInput) => {
       const res = await authFetch('/api/teachers', { method: 'POST', body: JSON.stringify(input) });
-      const created = await safeJson<Teacher>(res);
+      const created = await safeJson<SavedTeacher>(res);
       await reload();
       return created;
     },
@@ -55,7 +61,7 @@ export function useTeachers() {
   const update = useCallback(
     async (id: number, input: TeacherInput) => {
       const res = await authFetch(`/api/teachers/${id}`, { method: 'PUT', body: JSON.stringify(input) });
-      const updated = await safeJson<Teacher>(res);
+      const updated = await safeJson<SavedTeacher>(res);
       await reload();
       return updated;
     },

@@ -2,6 +2,8 @@ import { describe, it, beforeEach, expect } from 'vitest';
 import { req, resetDb, adminToken, auth, createUser, uniqueEmail, tokenFor, TEST_PASSWORD } from './helpers';
 
 /**
+ * Teacher records without email: their Prof accounts are linked by hand here
+ * (a record with an email gets its account automatically, see invitations.test.ts).
  * Two classes. Karim is in charge of class A and also teaches a course to class B
  * in the timetable; class C is not his. One student per class.
  */
@@ -18,9 +20,9 @@ async function setup() {
   const students = { a: await student('Amine', a), b: await student('Bilal', b), c: await student('Chaima', c) };
 
   const karim = (
-    await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Karim', lastName: 'H', email: uniqueEmail('karim'), classId: a })
+    await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Karim', lastName: 'H', classId: a })
   ).body;
-  const other = (await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Nadia', lastName: 'B', email: uniqueEmail('nadia') })).body;
+  const other = (await req.post('/api/teachers').set(auth(admin)).send({ firstName: 'Nadia', lastName: 'B' })).body;
   const slot = await req
     .post('/api/timetable')
     .set(auth(admin))

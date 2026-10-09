@@ -49,6 +49,10 @@ model User {
   // Teacher record of a TEACHER account: gives access to the classes they teach.
   teacherId     Int?           @unique
   teacher       Teacher?       @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  // Pending invitation: the person chooses their password through an emailed link.
+  // Only a hash of the link's token is stored.
+  inviteTokenHash String?      @unique
+  inviteExpiresAt DateTime?
   announcements Announcement[]
   documents     Document[]
   createdAt     DateTime       @default(now())

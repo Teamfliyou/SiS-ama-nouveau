@@ -29,6 +29,7 @@ import publicRegistrationRoutes from '../routes/publicRegistration';
 import preRegistrationRoutes from '../routes/preRegistrations';
 import announcementRoutes from '../routes/announcements';
 import documentRoutes from '../routes/documents';
+import invitationRoutes from '../routes/invitations';
 import { getJwtSecret } from './secret';
 
 /** Fails fast on a missing/weak JWT secret. Never rely on a default value. */
@@ -76,6 +77,8 @@ export function createApp(): Express {
   app.use('/api/setup', setupRoutes);
   // Online pre-registration form used by families (no account).
   app.use('/api/public/registration', publicRegistrationRoutes);
+  // Invitation links (teacher accounts): the person chooses their password (no account yet).
+  app.use('/api/invitations', invitationRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/classes', classRoutes);

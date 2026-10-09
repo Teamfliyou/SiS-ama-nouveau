@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { BookOpen, GraduationCap, Mail, Pencil, Phone, Plus, Trash2 } from 'lucide-react';
 import { apiErrorMessage } from '../../utils/api';
 import { toast } from '../../utils/toast';
-import { useTeachers, type Teacher, type TeacherInput } from '../../hooks/useTeachers';
+import { useTeachers, type SavedTeacher, type Teacher, type TeacherInput } from '../../hooks/useTeachers';
+import TeacherAccess from '../../components/TeacherAccess';
+import { invitationMessage, type InvitationResult } from '../../utils/invitations';
 import { useClasses } from '../../hooks/useClasses';
 import {
   EmptyState,
@@ -25,7 +27,7 @@ type Form = {
 const EMPTY: Form = { firstName: '', lastName: '', subject: '', email: '', phone: '', classIds: [] };
 
 export default function LiquidTeachers() {
-  const { teachers, loading, create, update, remove } = useTeachers();
+  const { teachers, loading, reload, create, update, remove } = useTeachers();
   const { classes } = useClasses();
 
   const [search, setSearch] = useState('');
@@ -36,6 +38,10 @@ export default function LiquidTeachers() {
   const [detail, setDetail] = useState<Teacher | null>(null);
   const [toDelete, setToDelete] = useState<Teacher | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Invitation made when saving a record (its link is shown when the email did not leave).
+  const [invitation, setInvitation] = useState<{ teacherId: number; result: InvitationResult } | null>(null);
+  // The detail follows the reloaded list (account status after an invitation).
+  const shownDetail = detail ? teachers.find((t) => t.id === detail.id) ?? detail : null;
 
   const filtered = useMemo(() => {
     if (!search) return teachers;
@@ -88,12 +94,20 @@ export default function LiquidTeachers() {
         classId: form.classIds[0] ?? null,
         classIds: form.classIds,
       };
+      let saved: SavedTeacher;
       if (editing) {
-        await update(editing.id, input);
+        saved = await update(editing.id, input);
         toast.success('Professeur modifié');
       } else {
-        await create(input);
+        saved = await create(input);
         toast.success('Professeur ajouté');
+      }
+      // Every teacher with an email gets their access: report the invitation.
+      if (saved.invitation) {
+        setInvitation({ teacherId: saved.id, result: saved.invitation });
+        const msg = invitationMessage(saved.invitation);
+        if (msg.ok) toast.success(msg.text);
+        else toast.error(msg.text);
       }
       setFormOpen(false);
     } catch (err) {
@@ -184,6 +198,10 @@ export default function LiquidTeachers() {
                   )}
                 </div>
               </button>
+              <div className="mt-3">
+                <TeacherAccess teacherId={t.id} email={t.email} account={t.account} compact
+                  result={invitation?.teacherId === t.id ? invitation.result : null} onChanged={() => void reload()} />
+              </div>
               <div className="flex items-center justify-end gap-1.5 mt-4 pt-3 border-t border-white/60">
                 <button type="button" onClick={() => openEdit(t)} className="lg-icon-btn" aria-label={`Modifier ${t.firstName}`}>
                   <Pencil className="w-4 h-4" />
@@ -262,36 +280,41 @@ export default function LiquidTeachers() {
 
       {/* Détail professeur */}
       <GlassModal open={Boolean(detail)} onClose={() => setDetail(null)} size="sm">
-        {detail && (
+        {shownDetail && (
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <span className="lg-avatar h-14 w-14 text-lg">{detail.firstName[0]}{detail.lastName[0]}</span>
+              <span className="lg-avatar h-14 w-14 text-lg">{shownDetail.firstName[0]}{shownDetail.lastName[0]}</span>
               <div className="min-w-0">
                 <p className="text-lg font-bold text-slate-900 truncate">
-                  {detail.firstName} <span className="uppercase">{detail.lastName}</span>
+                  {shownDetail.firstName} <span className="uppercase">{shownDetail.lastName}</span>
                 </p>
-                {detail.subject && <span className="lg-badge lg-badge-accent mt-1">{detail.subject}</span>}
+                {shownDetail.subject && <span className="lg-badge lg-badge-accent mt-1">{shownDetail.subject}</span>}
               </div>
             </div>
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between gap-3">
                 <dt className="text-slate-400">Classes</dt>
-                <dd className="text-slate-700 text-right">{(detail.classes ?? []).map((c) => c.name).join(', ') || '—'}</dd>
+                <dd className="text-slate-700 text-right">{(shownDetail.classes ?? []).map((c) => c.name).join(', ') || '—'}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-slate-400">Email</dt>
-                <dd className="text-slate-700 text-right truncate">{detail.email || '—'}</dd>
+                <dd className="text-slate-700 text-right truncate">{shownDetail.email || '—'}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-slate-400">Téléphone</dt>
-                <dd className="text-slate-700 text-right">{detail.phone || '—'}</dd>
+                <dd className="text-slate-700 text-right">{shownDetail.phone || '—'}</dd>
               </div>
             </dl>
+            <div>
+              <p className="text-sm text-slate-400 mb-1.5">Accès à l'application</p>
+              <TeacherAccess teacherId={shownDetail.id} email={shownDetail.email} account={shownDetail.account}
+                result={invitation?.teacherId === shownDetail.id ? invitation.result : null} onChanged={() => void reload()} />
+            </div>
             <div className="flex justify-end gap-2">
-              <GlassButton variant="ghost" icon={<Trash2 className="w-4 h-4" />} className="text-rose-600" onClick={() => setToDelete(detail)}>
+              <GlassButton variant="ghost" icon={<Trash2 className="w-4 h-4" />} className="text-rose-600" onClick={() => setToDelete(shownDetail)}>
                 Supprimer
               </GlassButton>
-              <GlassButton variant="primary" icon={<Pencil className="w-4 h-4" />} onClick={() => openEdit(detail)}>
+              <GlassButton variant="primary" icon={<Pencil className="w-4 h-4" />} onClick={() => openEdit(shownDetail)}>
                 Modifier
               </GlassButton>
             </div>
