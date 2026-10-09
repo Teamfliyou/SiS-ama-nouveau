@@ -1,9 +1,22 @@
-// The Juz Amma (30th part of the Qur'an): surahs 78 (An-Naba') to 114 (An-Nas).
-// It is assessed with competencies (one level per surah), not with marks.
+// Quran memorisation programme, assessed with competencies (one level per surah), not with marks.
+// It is split into 4 levels; each student works on their own level (Student.quranLevel).
 
 export type Surah = { number: number; name: string; arabic: string; verses: number };
 
-export const JUZ_AMMA_SURAHS: readonly Surah[] = [
+/** Every surah of the programme: Al-Fatiha, Juz Tabarak (67-77) and Juz Amma (78-114). */
+export const PROGRAMME_SURAHS: readonly Surah[] = [
+  { number: 1, name: 'Al-Fatiha', arabic: 'الفاتحة', verses: 7 },
+  { number: 67, name: 'Al-Mulk', arabic: 'الملك', verses: 30 },
+  { number: 68, name: 'Al-Qalam', arabic: 'القلم', verses: 52 },
+  { number: 69, name: 'Al-Haqqa', arabic: 'الحاقة', verses: 52 },
+  { number: 70, name: "Al-Ma'arij", arabic: 'المعارج', verses: 44 },
+  { number: 71, name: 'Nuh', arabic: 'نوح', verses: 28 },
+  { number: 72, name: 'Al-Jinn', arabic: 'الجن', verses: 28 },
+  { number: 73, name: 'Al-Muzzammil', arabic: 'المزمل', verses: 20 },
+  { number: 74, name: 'Al-Muddaththir', arabic: 'المدثر', verses: 56 },
+  { number: 75, name: 'Al-Qiyama', arabic: 'القيامة', verses: 40 },
+  { number: 76, name: 'Al-Insan', arabic: 'الإنسان', verses: 31 },
+  { number: 77, name: 'Al-Mursalat', arabic: 'المرسلات', verses: 50 },
   { number: 78, name: "An-Naba'", arabic: 'النبأ', verses: 40 },
   { number: 79, name: "An-Nazi'at", arabic: 'النازعات', verses: 46 },
   { number: 80, name: "'Abasa", arabic: 'عبس', verses: 42 },
@@ -43,7 +56,35 @@ export const JUZ_AMMA_SURAHS: readonly Surah[] = [
   { number: 114, name: 'An-Nas', arabic: 'الناس', verses: 6 },
 ];
 
-export const SURAH_NUMBERS = new Set(JUZ_AMMA_SURAHS.map((s) => s.number));
+export const SURAH_NUMBERS = new Set(PROGRAMME_SURAHS.map((s) => s.number));
+const surahByNumber = new Map(PROGRAMME_SURAHS.map((s) => [s.number, s]));
+
+const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => to - i);
+
+/** The 4 levels, surahs listed in learning order (from the shortest). */
+export const QURAN_LEVELS = [
+  { level: 1, name: 'Niveau 1', description: 'Al-Fatiha et sourates 99 à 114', surahs: [1, ...range(99, 114)] },
+  { level: 2, name: 'Niveau 2', description: 'Sourates 87 à 98', surahs: range(87, 98) },
+  { level: 3, name: 'Niveau 3', description: 'Fin du Juz Amma, sourates 78 à 86', surahs: range(78, 86) },
+  { level: 4, name: 'Niveau 4', description: 'Juz Tabarak, sourates 67 à 77', surahs: range(67, 77) },
+].map((l) => ({ ...l, surahs: l.surahs.map((n) => surahByNumber.get(n)!) }));
+
+export const MAX_QURAN_LEVEL = QURAN_LEVELS.length;
+
+/** A surah counts as memorised once it is ACQUIRED or MASTERED. */
+export const isMemorized = (level: string | null | undefined) => level === 'ACQUIRED' || level === 'MASTERED';
+
+/**
+ * Progress on each level from the latest known competency per surah.
+ * A level is complete when all its surahs are memorised.
+ */
+export function levelProgress(latest: Map<number, string> | Record<number, string>) {
+  const get = (n: number) => (latest instanceof Map ? latest.get(n) : latest[n]);
+  return QURAN_LEVELS.map((l) => {
+    const memorized = l.surahs.filter((s) => isMemorized(get(s.number))).length;
+    return { level: l.level, memorized, total: l.surahs.length, complete: memorized === l.surahs.length };
+  });
+}
 
 export const COMPETENCY_LEVELS = ['NOT_ACQUIRED', 'IN_PROGRESS', 'ACQUIRED', 'MASTERED'] as const;
 export type CompetencyLevel = (typeof COMPETENCY_LEVELS)[number];
@@ -55,7 +96,7 @@ export const COMPETENCY_LEVEL_LABELS: Record<CompetencyLevel, { label: string; s
   MASTERED: { label: 'Maîtrisé', short: 'M' },
 };
 
-/** Counts per level; a surah counts as memorised once it is ACQUIRED or MASTERED. */
+/** Counts per competency level for a set of assessments. */
 export function summarizeLevels(levels: Iterable<string>) {
   const counts: Record<CompetencyLevel, number> = { NOT_ACQUIRED: 0, IN_PROGRESS: 0, ACQUIRED: 0, MASTERED: 0 };
   for (const l of levels) {
@@ -65,6 +106,5 @@ export function summarizeLevels(levels: Iterable<string>) {
     counts,
     assessed: counts.NOT_ACQUIRED + counts.IN_PROGRESS + counts.ACQUIRED + counts.MASTERED,
     memorized: counts.ACQUIRED + counts.MASTERED,
-    total: JUZ_AMMA_SURAHS.length,
   };
 }

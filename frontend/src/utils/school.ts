@@ -1,4 +1,4 @@
-// Shared types and helpers for school records (notes, Juz Amma, bulletins).
+// Shared types and helpers for school records (notes, Coran, bulletins).
 
 export type ClassItem = { id: number; name: string; _count: { students: number } };
 export type Term = { id: number; name: string; startDate: string; endDate: string };
@@ -13,6 +13,16 @@ export const LEVELS: { code: CompetencyLevel; label: string; short: string; colo
   { code: 'ACQUIRED', label: 'Acquis', short: 'A', color: 'bg-emerald-500 text-white border-emerald-500' },
   { code: 'MASTERED', label: 'Maîtrisé', short: 'M', color: 'bg-blue-600 text-white border-blue-600' },
 ];
+
+export type QuranLevel = { level: number; name: string; description: string; surahs: Surah[] };
+
+/** Memorised surahs per programme level (ACQUIRED or MASTERED), from the latest level per surah. */
+export function levelProgress(programme: QuranLevel[], latest: Record<number, string>) {
+  return programme.map((l) => {
+    const memorized = l.surahs.filter((s) => latest[s.number] === 'ACQUIRED' || latest[s.number] === 'MASTERED').length;
+    return { level: l.level, memorized, total: l.surahs.length, complete: memorized === l.surahs.length };
+  });
+}
 
 export const levelInfo = (code: string | null | undefined) => LEVELS.find((l) => l.code === code) ?? null;
 

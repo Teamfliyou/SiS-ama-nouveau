@@ -44,6 +44,7 @@ model Student {
   medicalInfo             String?
   photoOptOut             Boolean                @default(false) // the family refuses photos of the child
   canLeaveAlone           Boolean                @default(false) // allowed to go home alone
+  quranLevel              Int                    @default(1) // Quran programme level (1 to 4), see lib/quran.ts
   classId                 Int?
   class                   Class?                 @relation(fields: [classId], references: [id])
   guardians               Guardian[]

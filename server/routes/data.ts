@@ -6,7 +6,7 @@ import { asyncHandler } from '../lib/errors';
 import { validate, isRealDateString, timeSchema } from '../lib/validate';
 import { normalizeKey, studentKey } from '../lib/dedupe';
 import { eurosToCents } from '../lib/money';
-import { COMPETENCY_LEVELS, SURAH_NUMBERS } from '../lib/juzAmma';
+import { COMPETENCY_LEVELS, SURAH_NUMBERS } from '../lib/quran';
 
 const router = Router();
 
@@ -110,6 +110,7 @@ const importPayloadSchema = z.object({
         medicalInfo: nullableText(1000),
         photoOptOut: z.boolean().optional(),
         canLeaveAlone: z.boolean().optional(),
+        quranLevel: z.number().int().min(1).max(4).optional(),
         class: z.object({ name: z.string() }).nullable().optional(),
       })
     )
@@ -545,6 +546,7 @@ router.post(
               medicalInfo: st.medicalInfo,
               photoOptOut: st.photoOptOut ?? false,
               canLeaveAlone: st.canLeaveAlone ?? false,
+              quranLevel: st.quranLevel ?? 1,
               classId: resolveClassId(st.class?.name),
             },
           });

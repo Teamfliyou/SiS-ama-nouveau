@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { NextFunction, Request, Response } from 'express';
 import { AppError } from './errors';
-import { COMPETENCY_LEVELS, JUZ_AMMA_SURAHS, SURAH_NUMBERS } from './juzAmma';
+import { COMPETENCY_LEVELS, PROGRAMME_SURAHS, SURAH_NUMBERS, MAX_QURAN_LEVEL } from './quran';
 
 // ─── Common primitives ────────────────────────────────────────────────
 
@@ -265,12 +265,17 @@ export const competenciesSaveSchema = z.object({
         surahNumber: z
           .number()
           .int()
-          .refine((n) => SURAH_NUMBERS.has(n), { message: "Sourate hors du Juz Amma (78 à 114)" }),
+          .refine((n) => SURAH_NUMBERS.has(n), { message: 'Sourate hors du programme de Coran' }),
         // null clears the assessment of that surah.
         level: competencyLevelSchema.nullable(),
       })
     )
-    .max(JUZ_AMMA_SURAHS.length, 'Trop de sourates'),
+    .max(PROGRAMME_SURAHS.length, 'Trop de sourates'),
+});
+
+export const quranLevelSchema = z.object({
+  studentId: z.number().int().positive('Élève invalide'),
+  level: z.number().int().min(1, 'Niveau invalide').max(MAX_QURAN_LEVEL, 'Niveau invalide'),
 });
 
 export const reportRemarkSchema = z.object({

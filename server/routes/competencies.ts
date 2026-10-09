@@ -2,31 +2,36 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
-import { validate, competenciesSaveSchema, parseId } from '../lib/validate';
+import { validate, competenciesSaveSchema, quranLevelSchema, parseId } from '../lib/validate';
 import {
-  JUZ_AMMA_SURAHS,
+  PROGRAMME_SURAHS,
+  QURAN_LEVELS,
   COMPETENCY_LEVELS,
   COMPETENCY_LEVEL_LABELS,
+  levelProgress,
   summarizeLevels,
   type CompetencyLevel,
-} from '../lib/juzAmma';
+} from '../lib/quran';
 
-// Competencies only exist for the Juz Amma: one level per surah, per student and term.
+// Quran competencies: one level per surah, per student and term. The programme is
+// split into 4 levels and each student works on their own level (Student.quranLevel).
 const router = Router();
 
 router.use(authenticate);
 
-// GET /api/competencies/juz-amma — reference list of surahs and levels.
-router.get('/juz-amma', (_req, res) => {
+// GET /api/competencies/programme — the 4 levels with their surahs, and the competency scale.
+router.get('/programme', (_req, res) => {
   res.json({
-    surahs: JUZ_AMMA_SURAHS,
+    programme: QURAN_LEVELS,
+    surahs: PROGRAMME_SURAHS,
     levels: COMPETENCY_LEVELS.map((code) => ({ code, ...COMPETENCY_LEVEL_LABELS[code] })),
   });
 });
 
 // GET /api/competencies?classId=&termId=
 // Levels of every student of the class for the term, plus the latest level reached
-// in an EARLIER term (`previous`) so the teacher can start from it.
+// in an EARLIER term (`previous`) so the teacher can start from it. `progress` counts
+// memorised surahs per programme level from the latest known assessments.
 router.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -39,7 +44,7 @@ router.get(
 
     const students = await prisma.student.findMany({
       where: { classId: cid },
-      select: { id: true, firstName: true, lastName: true },
+      select: { id: true, firstName: true, lastName: true, quranLevel: true },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
     const ids = students.map((s) => s.id);
@@ -60,7 +65,13 @@ router.get(
         const previous: Record<number, string> = {};
         // Ascending by term start: the latest earlier term wins.
         for (const a of earlier) if (a.studentId === s.id) previous[a.surahNumber] = a.level;
-        return { ...s, levels, previous, summary: summarizeLevels(Object.values(levels)) };
+        return {
+          ...s,
+          levels,
+          previous,
+          summary: summarizeLevels(Object.values(levels)),
+          progress: levelProgress({ ...previous, ...levels }),
+        };
       }),
     });
   })
@@ -102,6 +113,22 @@ router.put(
 
     const saved = await prisma.surahAssessment.findMany({ where: { studentId, termId } });
     res.json({ success: true, summary: summarizeLevels(saved.map((a) => a.level)) });
+  })
+);
+
+// PUT /api/competencies/level — moves a student to another programme level.
+// The teacher decides: the UI only suggests it once the current level is complete.
+router.put(
+  '/level',
+  validate(quranLevelSchema),
+  asyncHandler(async (req, res) => {
+    const { studentId, level } = req.body as { studentId: number; level: number };
+    const student = await prisma.student.update({
+      where: { id: studentId },
+      data: { quranLevel: level },
+      select: { id: true, quranLevel: true },
+    });
+    res.json(student);
   })
 );
 

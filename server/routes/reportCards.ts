@@ -4,7 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { asyncHandler, AppError } from '../lib/errors';
 import { validate, reportRemarkSchema, parseId } from '../lib/validate';
 import { computeClassResults } from '../lib/reportCard';
-import { JUZ_AMMA_SURAHS, summarizeLevels } from '../lib/juzAmma';
+import { QURAN_LEVELS, levelProgress, summarizeLevels } from '../lib/quran';
 
 const router = Router();
 
@@ -12,7 +12,7 @@ router.use(authenticate);
 
 // GET /api/report-cards?classId=&termId=&studentId=
 // Report cards of a class for a term (or of one of its students): subject averages,
-// class statistics, rank, Juz Amma competencies, attendance over the term and remark.
+// class statistics, rank, Quran competencies (student's level), attendance over the term and remark.
 router.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -31,7 +31,7 @@ router.get(
 
     const students = await prisma.student.findMany({
       where: { classId: cid },
-      select: { id: true, firstName: true, lastName: true },
+      select: { id: true, firstName: true, lastName: true, quranLevel: true },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
     if (sid !== null && !students.some((s) => s.id === sid)) {
@@ -48,7 +48,12 @@ router.get(
         where: { studentId: { in: wanted }, date: { gte: term.startDate, lte: term.endDate } },
         _count: { _all: true },
       }),
-      prisma.surahAssessment.findMany({ where: { studentId: { in: wanted }, termId: tid } }),
+      // This term and the earlier ones, oldest first: the latest level per surah wins.
+      prisma.surahAssessment.findMany({
+        where: { studentId: { in: wanted }, term: { startDate: { lte: term.startDate } } },
+        include: { term: { select: { startDate: true } } },
+        orderBy: { term: { startDate: 'asc' } },
+      }),
       prisma.reportRemark.findMany({ where: { studentId: { in: wanted }, termId: tid } }),
       prisma.teacher.findMany({ where: { classId: cid }, select: { firstName: true, lastName: true, subject: true } }),
     ]);
@@ -60,16 +65,22 @@ router.get(
       .map((s) => {
         const count = (status: string) =>
           attendance.find((a) => a.studentId === s.id && a.status === status)?._count._all ?? 0;
-        const levels = new Map(
-          surahLevels.filter((a) => a.studentId === s.id).map((a) => [a.surahNumber, a.level] as const)
-        );
+        const own = surahLevels.filter((a) => a.studentId === s.id);
+        const latest = new Map(own.map((a) => [a.surahNumber, a.level] as const));
+        const thisTerm = own.filter((a) => a.termId === tid).map((a) => a.level);
+        const level = QURAN_LEVELS.find((l) => l.level === s.quranLevel) ?? QURAN_LEVELS[0];
+        const { quranLevel: _quranLevel, ...student } = s;
         return {
-          student: s,
+          student,
           ...results.get(s.id)!,
           attendance: { present: count('PRESENT'), absent: count('ABSENT'), late: count('LATE') },
-          juzAmma: {
-            surahs: JUZ_AMMA_SURAHS.map((su) => ({ ...su, level: levels.get(su.number) ?? null })),
-            summary: summarizeLevels(levels.values()),
+          quran: {
+            level: level.level,
+            levelName: level.name,
+            levelDescription: level.description,
+            surahs: level.surahs.map((su) => ({ ...su, level: latest.get(su.number) ?? null })),
+            progress: levelProgress(latest),
+            summary: summarizeLevels(thisTerm),
           },
           remark: remarks.find((r) => r.studentId === s.id)?.comment ?? '',
         };
