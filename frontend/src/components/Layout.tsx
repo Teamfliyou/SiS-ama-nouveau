@@ -2,7 +2,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, BookOpen, CreditCard, LogOut, Bell, Search, Menu,
   ClipboardList, UploadCloud, ShieldCheck, GraduationCap,
-  ChevronDown, User, KeyRound, X, Eye, EyeOff, Printer,
+  ChevronDown, User, KeyRound, X, Eye, EyeOff,
   NotebookPen, Sparkles, FileText, BookMarked, CalendarDays, NotebookText, UserPlus
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
@@ -55,7 +55,6 @@ export default function Layout() {
     { name: 'Professeurs',     href: '/teachers',     icon: GraduationCap },
     { name: 'Finances',        href: '/finances',     icon: CreditCard },
     { name: 'Appel',           href: '/attendance',   icon: ClipboardList },
-    { name: 'Feuilles d\'appel', href: '/attendance-sheets', icon: Printer },
     { name: 'Emploi du temps', href: '/timetable',    icon: CalendarDays },
     { name: 'Cahier de textes', href: '/lessons',     icon: NotebookText },
     { name: 'Notes',           href: '/grades',       icon: NotebookPen },

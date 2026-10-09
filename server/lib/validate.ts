@@ -9,6 +9,7 @@ import {
   MAP_HIZBS,
   QURAN_PATH_CODES,
 } from './quran';
+import { HALF_DAYS } from './attendance';
 
 // ─── Common primitives ────────────────────────────────────────────────
 
@@ -194,6 +195,7 @@ export const dateStringSchema = z
 
 export const attendanceCreateSchema = z.object({
   date: dateStringSchema,
+  period: z.enum(HALF_DAYS, { message: 'Demi-journée invalide (AM ou PM)' }),
   records: z
     .array(
       z.object({

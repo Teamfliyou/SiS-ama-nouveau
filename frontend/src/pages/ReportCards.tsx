@@ -288,11 +288,11 @@ export default function ReportCards() {
               {/* Attendance */}
               <h4 className="mt-5 mb-2 font-bold uppercase text-xs tracking-wide text-slate-600">Assiduité</h4>
               <p>
-                Absences : <b>{r.attendance.absent}</b>
+                Absences : <b>{r.attendance.absent}</b> demi-journée{r.attendance.absent > 1 ? 's' : ''}
                 <span className="mx-3 text-slate-300">|</span>
                 Retards : <b>{r.attendance.late}</b>
                 <span className="mx-3 text-slate-300">|</span>
-                Présences : <b>{r.attendance.present}</b>
+                Présences : <b>{r.attendance.present}</b> demi-journée{r.attendance.present > 1 ? 's' : ''}
               </p>
 
               {/* Remark */}

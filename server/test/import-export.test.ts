@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, expect } from 'vitest';
-import { req, resetDb, adminToken, auth, createUser, uniqueEmail, tokenFor } from './helpers';
+import { req, resetDb, adminToken, auth, createUser, uniqueEmail, tokenFor, morningCourseEveryDay } from './helpers';
 
 describe('full export / import (ADMIN only)', () => {
   beforeEach(resetDb);
@@ -166,10 +166,11 @@ describe('full import merge semantics (idempotent restore)', () => {
       await req.post('/api/students').set(auth(token)).send({ firstName: 'Noa', lastName: 'Bernard', classId: cls.id })
     ).body;
     await req.post('/api/finances').set(auth(token)).send({ amount: 33.33, studentId: stu.id, method: 'Chèque' });
+    await morningCourseEveryDay(token, cls.id);
     await req
       .post('/api/attendance')
       .set(auth(token))
-      .send({ date: '2026-09-09', records: [{ studentId: stu.id, status: 'LATE' }] });
+      .send({ date: '2026-09-09', period: 'AM', records: [{ studentId: stu.id, status: 'LATE' }] });
 
     const backup = (await req.get('/api/export').set(auth(token))).body;
     expect(backup.version).toBe('5');

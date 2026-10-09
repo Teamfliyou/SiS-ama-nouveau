@@ -5,7 +5,6 @@ import Classes from './pages/Classes';
 import Students from './pages/Students';
 import Finances from './pages/Finances';
 import Attendance from './pages/Attendance';
-import AttendanceSheets from './pages/AttendanceSheets';
 import CsvImport from './pages/CsvImport';
 import UsersAdmin from './pages/UsersAdmin';
 import Teachers from './pages/Teachers';
@@ -46,7 +45,8 @@ function App() {
           <Route path="pre-registrations" element={<PreRegistrations />} />
           <Route path="finances" element={<Finances />} />
           <Route path="attendance" element={<Attendance />} />
-          <Route path="attendance-sheets" element={<AttendanceSheets />} />
+          {/* The roll-call sheets are now a tab of the Appel page. */}
+          <Route path="attendance-sheets" element={<Navigate to="/attendance?vue=feuille" replace />} />
           <Route path="timetable" element={<Timetable />} />
           <Route path="lessons" element={<LessonLog />} />
           <Route path="import-csv" element={<CsvImport />} />

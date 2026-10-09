@@ -147,7 +147,7 @@ export default function Dashboard() {
     const shortcuts = [
       { label: 'Inscrire un élève',   sub: 'Nouvelle inscription',        icon: UserPlus,    tint: 'bg-blue-50 text-primary',       onClick: () => navigate('/students', { state: { openForm: true } }) },
       { label: 'Encaisser un paiement', sub: 'Espèces, virement, chèque…', icon: CreditCard,  tint: 'bg-emerald-50 text-emerald-600', onClick: () => navigate('/finances', { state: { openForm: true } }) },
-      { label: "Feuilles d'appel",    sub: 'Imprimer pour une classe',    icon: Printer,     tint: 'bg-violet-50 text-violet-600',  onClick: () => navigate('/attendance-sheets') },
+      { label: "Feuilles d'appel",    sub: 'Imprimer pour une classe',    icon: Printer,     tint: 'bg-violet-50 text-violet-600',  onClick: () => navigate('/attendance?vue=feuille') },
     ];
     const rowCls = 'w-full flex items-center gap-3 px-4 py-3 min-h-[60px] text-left active:bg-slate-50';
 
